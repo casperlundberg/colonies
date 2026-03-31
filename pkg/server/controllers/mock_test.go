@@ -628,14 +628,10 @@ func createFakeColoniesController() (*ColoniesController, *DatabaseMock) {
 	dataPath := fmt.Sprintf("/tmp/colonies/etcd-%d", portOffset)
 
 	node := cluster.Node{Name: nodeName, Host: "localhost", EtcdClientPort: etcdClientPort, EtcdPeerPort: etcdPeerPort, RelayPort: relayPort, APIPort: constants.TESTPORT}
-	clusterConfig := cluster.Config{}
-	clusterConfig.AddNode(node)
 
-	etcdNode := etcd.Node{Name: node.Name, Host: node.Host, EtcdClientPort: node.EtcdClientPort, EtcdPeerPort: node.EtcdPeerPort, RelayPort: node.RelayPort, APIPort: node.APIPort}
+	etcdNode := etcd.NodeFromCluster(node)
 	etcdConfig := etcd.Config{}
-	for _, n := range clusterConfig.Nodes {
-		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
-	}
+	etcdConfig.AddNode(etcdNode)
 	clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, dataPath)
 	clusterNode.Start()
 	clusterNode.WaitToStart()
@@ -667,14 +663,10 @@ func prepareTestDB(prefix string) (database.Database, error) {
 func createTestColoniesController(db database.Database) *ColoniesController {
 	etcdDir, _ := os.MkdirTemp("", "colonies-test-etcd-*")
 	node := cluster.Node{Name: "test", Host: "localhost", EtcdClientPort: 24101, EtcdPeerPort: 23101, RelayPort: 25101, APIPort: constants.TESTPORT}
-	clusterConfig := cluster.Config{}
-	clusterConfig.AddNode(node)
 
-	etcdNode := etcd.Node{Name: node.Name, Host: node.Host, EtcdClientPort: node.EtcdClientPort, EtcdPeerPort: node.EtcdPeerPort, RelayPort: node.RelayPort, APIPort: node.APIPort}
+	etcdNode := etcd.NodeFromCluster(node)
 	etcdConfig := etcd.Config{}
-	for _, n := range clusterConfig.Nodes {
-		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
-	}
+	etcdConfig.AddNode(etcdNode)
 	clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, etcdDir)
 	clusterNode.Start()
 	clusterNode.WaitToStart()
@@ -687,14 +679,10 @@ func createTestColoniesController(db database.Database) *ColoniesController {
 func createTestColoniesControllerWithStaleDuration(db database.Database, staleDuration time.Duration) *ColoniesController {
 	etcdDir, _ := os.MkdirTemp("", "colonies-test-etcd-*")
 	node := cluster.Node{Name: "test", Host: "localhost", EtcdClientPort: 24101, EtcdPeerPort: 23101, RelayPort: 25101, APIPort: constants.TESTPORT}
-	clusterConfig := cluster.Config{}
-	clusterConfig.AddNode(node)
 
-	etcdNode := etcd.Node{Name: node.Name, Host: node.Host, EtcdClientPort: node.EtcdClientPort, EtcdPeerPort: node.EtcdPeerPort, RelayPort: node.RelayPort, APIPort: node.APIPort}
+	etcdNode := etcd.NodeFromCluster(node)
 	etcdConfig := etcd.Config{}
-	for _, n := range clusterConfig.Nodes {
-		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
-	}
+	etcdConfig.AddNode(etcdNode)
 	clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, etcdDir)
 	clusterNode.Start()
 	clusterNode.WaitToStart()
@@ -707,14 +695,10 @@ func createTestColoniesControllerWithStaleDuration(db database.Database, staleDu
 func createTestColoniesController2(db database.Database) *ColoniesController {
 	etcdDir, _ := os.MkdirTemp("", "colonies-test-etcd2-*")
 	node := cluster.Node{Name: "test2", Host: "localhost", EtcdClientPort: 24102, EtcdPeerPort: 23102, RelayPort: 25102, APIPort: constants.TESTPORT}
-	clusterConfig := cluster.Config{}
-	clusterConfig.AddNode(node)
 
-	etcdNode := etcd.Node{Name: node.Name, Host: node.Host, EtcdClientPort: node.EtcdClientPort, EtcdPeerPort: node.EtcdPeerPort, RelayPort: node.RelayPort, APIPort: node.APIPort}
+	etcdNode := etcd.NodeFromCluster(node)
 	etcdConfig := etcd.Config{}
-	for _, n := range clusterConfig.Nodes {
-		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
-	}
+	etcdConfig.AddNode(etcdNode)
 	clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, etcdDir)
 	clusterNode.Start()
 	clusterNode.WaitToStart()

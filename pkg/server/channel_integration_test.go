@@ -39,15 +39,9 @@ func TestChannelEndToEndIntegration(t *testing.T) {
 		EtcdPeerPort:   2380,
 		RelayPort:      25100,
 	}
-	clusterConfig := cluster.Config{
-		Nodes: []cluster.Node{thisNode},
-	}
-
-	etcdNode := etcd.Node{Name: thisNode.Name, Host: thisNode.Host, EtcdClientPort: thisNode.EtcdClientPort, EtcdPeerPort: thisNode.EtcdPeerPort, RelayPort: thisNode.RelayPort, APIPort: thisNode.APIPort}
+	etcdNode := etcd.NodeFromCluster(thisNode)
 	etcdConfig := etcd.Config{}
-	for _, n := range clusterConfig.Nodes {
-		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
-	}
+	etcdConfig.AddNode(etcdNode)
 	etcdDataPath := "/tmp/test-etcd-" + time.Now().Format("20060102150405")
 	clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, etcdDataPath)
 	clusterNode.Start()
@@ -241,15 +235,9 @@ func TestChannelCleanupOnProcessFail(t *testing.T) {
 		EtcdPeerPort:   2380,
 		RelayPort:      25101,
 	}
-	clusterConfig := cluster.Config{
-		Nodes: []cluster.Node{thisNode},
-	}
-
-	etcdNode2 := etcd.Node{Name: thisNode.Name, Host: thisNode.Host, EtcdClientPort: thisNode.EtcdClientPort, EtcdPeerPort: thisNode.EtcdPeerPort, RelayPort: thisNode.RelayPort, APIPort: thisNode.APIPort}
+	etcdNode2 := etcd.NodeFromCluster(thisNode)
 	etcdConfig2 := etcd.Config{}
-	for _, n := range clusterConfig.Nodes {
-		etcdConfig2.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
-	}
+	etcdConfig2.AddNode(etcdNode2)
 	etcdDataPath2 := "/tmp/test-etcd-fail-" + time.Now().Format("20060102150405")
 	clusterNode2 := etcd.CreateEtcdServer(etcdNode2, etcdConfig2, etcdDataPath2)
 	clusterNode2.Start()

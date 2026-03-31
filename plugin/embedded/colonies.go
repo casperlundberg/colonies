@@ -139,6 +139,12 @@ func (db *EmbeddedDatabase) RemoveColonyByName(colonyName string) error {
 		return err
 	}
 
+	// Remove files by colony
+	fileIDs := db.filesIdx.byColony.Lookup(colonyName)
+	for _, fileID := range fileIDs {
+		_ = db.RemoveFileByID(colonyName, fileID)
+	}
+
 	return nil
 }
 

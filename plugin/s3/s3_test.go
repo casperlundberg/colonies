@@ -1,7 +1,6 @@
 package s3
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,9 +18,9 @@ func TestS3Upload(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Create a local file
-	tmpDir, err := ioutil.TempDir("/tmp/", "test")
+	tmpDir, err := os.MkdirTemp("/tmp/", "test")
 	assert.Nil(t, err)
-	f, err := ioutil.TempFile(tmpDir, "test")
+	f, err := os.CreateTemp(tmpDir, "test")
 	assert.Nil(t, err)
 	filename := filepath.Base(f.Name())
 	data := "testdata"
@@ -44,9 +43,9 @@ func TestS3Download(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Create a local file
-	srcTmpDir, err := ioutil.TempDir("/tmp/", "src")
+	srcTmpDir, err := os.MkdirTemp("/tmp/", "src")
 	assert.Nil(t, err)
-	f, err := ioutil.TempFile(srcTmpDir, "test")
+	f, err := os.CreateTemp(srcTmpDir, "test")
 	assert.Nil(t, err)
 	filename := filepath.Base(f.Name())
 	data := "testdata"
@@ -54,7 +53,7 @@ func TestS3Download(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Create download dir
-	dstTmpDir, err := ioutil.TempDir("/tmp/", "dst")
+	dstTmpDir, err := os.MkdirTemp("/tmp/", "dst")
 	assert.Nil(t, err)
 
 	// Upload file to S3
@@ -83,9 +82,9 @@ func TestS3Remove(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Create a local file
-	tmpDir, err := ioutil.TempDir("/tmp/", "test")
+	tmpDir, err := os.MkdirTemp("/tmp/", "test")
 	assert.Nil(t, err)
-	f, err := ioutil.TempFile(tmpDir, "test")
+	f, err := os.CreateTemp(tmpDir, "test")
 	assert.Nil(t, err)
 	filename := filepath.Base(f.Name())
 	assert.Nil(t, err)

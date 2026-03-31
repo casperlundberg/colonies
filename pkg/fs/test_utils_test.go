@@ -3,7 +3,7 @@ package fs
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -32,7 +32,7 @@ func setupTestEnv(t *testing.T) (*testEnv, *client.ColoniesClient, *server.Serve
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	gin.SetMode(gin.ReleaseMode)
-	gin.DefaultWriter = ioutil.Discard
+	gin.DefaultWriter = io.Discard
 	//log.SetLevel(log.DebugLevel)
 	client, server, serverPrvKey, done := server.PrepareTests(t)
 
@@ -92,8 +92,8 @@ func areDirsSame(dir1, dir2 string) (bool, error) {
 
 			// Compare file contents
 			if !info1.IsDir() {
-				content1, _ := ioutil.ReadFile(path1)
-				content2, _ := ioutil.ReadFile(path2)
+				content1, _ := os.ReadFile(path1)
+				content2, _ := os.ReadFile(path2)
 				if !bytes.Equal(content1, content2) {
 					isSame = false
 					return fmt.Errorf("content of %s and %s is not the same", path1, path2)

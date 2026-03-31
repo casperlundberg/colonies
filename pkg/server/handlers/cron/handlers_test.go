@@ -1,7 +1,6 @@
 package cron_test
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -351,9 +350,11 @@ func TestCronArgs(t *testing.T) {
 
 	process, err := client.Assign(env.ColonyName, 100, "", "", env.ExecutorPrvKey)
 	assert.Nil(t, err)
-
-	// TODO:
-	fmt.Println(process)
+	assert.NotNil(t, process)
+	assert.Equal(t, "test_func", process.FunctionSpec.FuncName)
+	assert.Len(t, process.FunctionSpec.Args, 1)
+	assert.Equal(t, "test_arg", process.FunctionSpec.Args[0])
+	assert.Equal(t, "test_arg", process.FunctionSpec.KwArgs["name"])
 
 	server.Shutdown()
 	<-done

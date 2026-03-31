@@ -19,28 +19,9 @@ func createTestCluster(t *testing.T, node cluster.Node) (cluster.Cluster, cluste
 
 	dataDir := t.TempDir()
 
-	clusterConfig := cluster.Config{}
-	clusterConfig.AddNode(node)
-
-	etcdNode := etcd.Node{
-		Name:           node.Name,
-		Host:           node.Host,
-		EtcdClientPort: node.EtcdClientPort,
-		EtcdPeerPort:   node.EtcdPeerPort,
-		RelayPort:      node.RelayPort,
-		APIPort:        node.APIPort,
-	}
+	etcdNode := etcd.NodeFromCluster(node)
 	etcdConfig := etcd.Config{}
-	for _, n := range clusterConfig.Nodes {
-		etcdConfig.AddNode(etcd.Node{
-			Name:           n.Name,
-			Host:           n.Host,
-			EtcdClientPort: n.EtcdClientPort,
-			EtcdPeerPort:   n.EtcdPeerPort,
-			RelayPort:      n.RelayPort,
-			APIPort:        n.APIPort,
-		})
-	}
+	etcdConfig.AddNode(etcdNode)
 
 	clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, dataDir)
 	clusterNode.Start()

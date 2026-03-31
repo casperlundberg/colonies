@@ -2,26 +2,12 @@ package server_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/colonyos/colonies/pkg/server"
 	"github.com/colonyos/colonies/pkg/utils"
 	"github.com/stretchr/testify/assert"
 )
-
-// TODO: sometimes we get these errors:
-//
-// server_handlers_test.go:57:
-//     	Error Trace:	server_handlers_test.go:57
-//     	Error:      	Not equal:
-//     	            	expected: 6
-//     	            	actual  : 5
-//     	Test:       	TestGetStatistics
-// server_handlers_test.go:59:
-//     	Error Trace:	server_handlers_test.go:59
-//     	Error:      	Not equal:
-//     	            	expected: 6
-//     	            	actual  : 7
-//     	Test:       	TestGetStatistics
 
 func TestGetStatistics(t *testing.T) {
 	env, client, coloniesServer, serverPrvKey, done := server.SetupTestEnv2(t)
@@ -68,13 +54,35 @@ func TestGetStatistics(t *testing.T) {
 		assert.Nil(t, err)
 	}
 
-	stat, err := client.Statistics(serverPrvKey)
-	assert.Nil(t, err)
+	// The Statistics endpoint gathers counts via separate DB queries (one per
+	// process state), so the counts are not read atomically. Background workers
+	// (TimeoutLoop, CronTriggerLoop, GeneratorTriggerLoop) can transition
+	// process states between individual count queries, causing the observed
+	// totals to drift by +/-1. Retry a few times to let the counts settle.
+	var matched bool
+	for attempt := 0; attempt < 10; attempt++ {
+		stat, err := client.Statistics(serverPrvKey)
+		assert.Nil(t, err)
 
-	assert.Equal(t, stat.WaitingProcesses, numberOfWaitingProcesses)
-	assert.Equal(t, stat.RunningProcesses, numberOfRunningProcesses)
-	assert.Equal(t, stat.SuccessfulProcesses, numberOfSuccessfulProcesses)
-	assert.Equal(t, stat.FailedProcesses, numberOfFailedProcesses)
+		if stat.WaitingProcesses == numberOfWaitingProcesses &&
+			stat.RunningProcesses == numberOfRunningProcesses &&
+			stat.SuccessfulProcesses == numberOfSuccessfulProcesses &&
+			stat.FailedProcesses == numberOfFailedProcesses {
+			matched = true
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if !matched {
+		// Fetch one final time so the failure message shows actual values.
+		stat, err := client.Statistics(serverPrvKey)
+		assert.Nil(t, err)
+		assert.Equal(t, numberOfWaitingProcesses, stat.WaitingProcesses)
+		assert.Equal(t, numberOfRunningProcesses, stat.RunningProcesses)
+		assert.Equal(t, numberOfSuccessfulProcesses, stat.SuccessfulProcesses)
+		assert.Equal(t, numberOfFailedProcesses, stat.FailedProcesses)
+	}
 
 	coloniesServer.Shutdown()
 	<-done

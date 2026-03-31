@@ -412,15 +412,11 @@ func TestEventHandleRelayServer(t *testing.T) {
 	config.AddNode(node1)
 	config.AddNode(node2)
 	config.AddNode(node3)
+	etcdConfig := etcd.ConfigFromCluster(config)
 
-	etcdConfig := etcd.Config{}
-	for _, n := range config.Nodes {
-		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
-	}
-
-	relayServer1 := etcd.CreateRelayServer(etcd.Node{Name: node1.Name, Host: node1.Host, EtcdClientPort: node1.EtcdClientPort, EtcdPeerPort: node1.EtcdPeerPort, RelayPort: node1.RelayPort, APIPort: node1.APIPort}, etcdConfig)
-	relayServer2 := etcd.CreateRelayServer(etcd.Node{Name: node2.Name, Host: node2.Host, EtcdClientPort: node2.EtcdClientPort, EtcdPeerPort: node2.EtcdPeerPort, RelayPort: node2.RelayPort, APIPort: node2.APIPort}, etcdConfig)
-	relayServer3 := etcd.CreateRelayServer(etcd.Node{Name: node3.Name, Host: node3.Host, EtcdClientPort: node3.EtcdClientPort, EtcdPeerPort: node3.EtcdPeerPort, RelayPort: node3.RelayPort, APIPort: node3.APIPort}, etcdConfig)
+	relayServer1 := etcd.CreateRelayServer(etcd.NodeFromCluster(node1), etcdConfig)
+	relayServer2 := etcd.CreateRelayServer(etcd.NodeFromCluster(node2), etcdConfig)
+	relayServer3 := etcd.CreateRelayServer(etcd.NodeFromCluster(node3), etcdConfig)
 
 	factory1 := backendGin.NewFactory()
 	handler1 := factory1.CreateTestableEventHandler(relayServer1)

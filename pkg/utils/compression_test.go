@@ -3,7 +3,6 @@ package utils
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,11 +12,11 @@ import (
 
 func TestCompression(t *testing.T) {
 	// Create an empty directory
-	bundleTestDir, err := ioutil.TempDir("/tmp/", "bundletest")
+	bundleTestDir, err := os.MkdirTemp("/tmp/", "bundletest")
 	assert.Nil(t, err)
 
 	// Add a test file to the directory
-	dummyFile, err := ioutil.TempFile(bundleTestDir, "dummydata")
+	dummyFile, err := os.CreateTemp(bundleTestDir, "dummydata")
 	assert.Nil(t, err)
 	_, err = dummyFile.Write([]byte("testdata"))
 	assert.Nil(t, err)
@@ -37,7 +36,7 @@ func TestCompression(t *testing.T) {
 
 	// Uncompress the tar-ball
 	reader := bytes.NewReader(byteArr)
-	bundleTestUncompressDir, err := ioutil.TempDir("/tmp/", "bundletestuncompress")
+	bundleTestUncompressDir, err := os.MkdirTemp("/tmp/", "bundletestuncompress")
 	assert.Nil(t, err)
 	Decompress(reader, bundleTestUncompressDir)
 

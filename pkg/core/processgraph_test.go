@@ -155,7 +155,69 @@ func TestProcessGraphCalcEdgesNodes(t *testing.T) {
 	err = graph.calcNodes()
 	assert.Nil(t, err)
 
-	// TODO: Finish this test
+	// Verify edges: the diamond graph has 4 edges
+	assert.Len(t, graph.Edges, 4)
+
+	edgeMap := make(map[string]Edge)
+	for _, edge := range graph.Edges {
+		edgeMap[edge.ID] = edge
+	}
+
+	// process1 -> process2
+	edge, ok := edgeMap[process1.ID+"-"+process2.ID]
+	assert.True(t, ok)
+	assert.Equal(t, process1.ID, edge.Source)
+	assert.Equal(t, process2.ID, edge.Target)
+	assert.False(t, edge.Animated)
+
+	// process1 -> process3
+	edge, ok = edgeMap[process1.ID+"-"+process3.ID]
+	assert.True(t, ok)
+	assert.Equal(t, process1.ID, edge.Source)
+	assert.Equal(t, process3.ID, edge.Target)
+	assert.False(t, edge.Animated)
+
+	// process2 -> process4
+	edge, ok = edgeMap[process2.ID+"-"+process4.ID]
+	assert.True(t, ok)
+	assert.Equal(t, process2.ID, edge.Source)
+	assert.Equal(t, process4.ID, edge.Target)
+	assert.False(t, edge.Animated)
+
+	// process3 -> process4
+	edge, ok = edgeMap[process3.ID+"-"+process4.ID]
+	assert.True(t, ok)
+	assert.Equal(t, process3.ID, edge.Source)
+	assert.Equal(t, process4.ID, edge.Target)
+	assert.False(t, edge.Animated)
+
+	// Verify nodes: 4 nodes, one per process
+	assert.Len(t, graph.Nodes, 4)
+
+	nodeMap := make(map[string]GraphNode)
+	for _, node := range graph.Nodes {
+		nodeMap[node.ID] = node
+	}
+
+	// process1 has no parents, so its type is "input"
+	node, ok := nodeMap[process1.ID]
+	assert.True(t, ok)
+	assert.Equal(t, "input", node.Type)
+
+	// process2 has parents and children, so its type is ""
+	node, ok = nodeMap[process2.ID]
+	assert.True(t, ok)
+	assert.Equal(t, "", node.Type)
+
+	// process3 has parents and children, so its type is ""
+	node, ok = nodeMap[process3.ID]
+	assert.True(t, ok)
+	assert.Equal(t, "", node.Type)
+
+	// process4 has no children, so its type is "output"
+	node, ok = nodeMap[process4.ID]
+	assert.True(t, ok)
+	assert.Equal(t, "output", node.Type)
 }
 
 func TestProcessGraphDepth(t *testing.T) {

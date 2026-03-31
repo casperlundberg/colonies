@@ -1,7 +1,7 @@
 package server
 
 import (
-	"io/ioutil"
+	"io"
 	"testing"
 	"time"
 
@@ -13,7 +13,7 @@ import (
 
 func TestRetention(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
-	gin.DefaultWriter = ioutil.Discard
+	gin.DefaultWriter = io.Discard
 	//log.SetLevel(log.DebugLevel)
 
 	client, server, serverPrvKey, done := prepareTestsWithRetention(t, true)
