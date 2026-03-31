@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 )
 
@@ -17,6 +18,13 @@ var (
 // Register adds a named ClusterFactory to the global registry. It panics if
 // a factory with the same name has already been registered.
 func Register(name string, factory ClusterFactory) {
+	if name == "" {
+		panic("cluster: Register name must not be empty")
+	}
+	if factory == nil {
+		panic("cluster: Register factory must not be nil")
+	}
+
 	registryMu.Lock()
 	defer registryMu.Unlock()
 
@@ -50,5 +58,6 @@ func RegisteredClusters() []string {
 	for name := range registry {
 		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names
 }

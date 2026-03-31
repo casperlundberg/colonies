@@ -2,6 +2,7 @@ package monitoring
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 )
 
@@ -27,6 +28,13 @@ var (
 // Register adds a MonitorFactory under the given name.
 // It returns an error if a factory with that name is already registered.
 func Register(name string, factory MonitorFactory) error {
+	if name == "" {
+		return fmt.Errorf("monitoring: Register name must not be empty")
+	}
+	if factory == nil {
+		return fmt.Errorf("monitoring: Register factory must not be nil")
+	}
+
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -60,5 +68,6 @@ func RegisteredMonitors() []string {
 	for name := range factories {
 		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names
 }

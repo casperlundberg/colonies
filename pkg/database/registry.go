@@ -20,6 +20,9 @@ func Register(name string, factory DriverFactory) {
 	driversMu.Lock()
 	defer driversMu.Unlock()
 
+	if name == "" {
+		panic("database: Register name must not be empty")
+	}
 	if factory == nil {
 		panic("database: Register factory is nil")
 	}

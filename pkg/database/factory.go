@@ -3,8 +3,6 @@ package database
 import (
 	"fmt"
 
-	"github.com/colonyos/colonies/plugin/embedded"
-	"github.com/colonyos/colonies/plugin/postgresql"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -39,31 +37,11 @@ func CreateDatabase(config DatabaseConfig) (Database, error) {
 		"DataDir":      config.DataDir,
 	}).Info("Creating database connection")
 
-	switch config.Type {
-	case PostgreSQL:
-		log.WithFields(log.Fields{
-			"Host":        config.Host,
-			"Port":        config.Port,
-			"Name":        config.Name,
-			"TimescaleDB": config.TimescaleDB,
-		}).Info("Initializing PostgreSQL database")
-
-		db := postgresql.CreatePQDatabase(config.Host, config.Port, config.User, config.Password, config.Name, config.Prefix, config.TimescaleDB)
-		return db, nil
-
-	case Embedded:
-		log.WithFields(log.Fields{
-			"DataDir": config.DataDir,
-		}).Info("Initializing embedded database")
-
-		db := embedded.CreateEmbeddedDatabase(config.DataDir)
-		if err := db.Initialize(); err != nil {
-			return nil, fmt.Errorf("failed to initialize embedded database: %w", err)
-		}
-		return db, nil
-
-	default:
+	name := string(config.Type)
+	db, err := CreateFromRegistry(name, config)
+	if err != nil {
 		log.WithField("DatabaseType", config.Type).Error("Unsupported database type requested")
-		return nil, fmt.Errorf("unsupported database type: %s", config.Type)
+		return nil, fmt.Errorf("unsupported database type: %s: %w", config.Type, err)
 	}
+	return db, nil
 }

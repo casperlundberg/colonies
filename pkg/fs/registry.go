@@ -27,8 +27,18 @@ var (
 
 // RegisterObjectStore registers a factory under the given name.
 func RegisterObjectStore(name string, factory ObjectStoreFactory) {
+	if name == "" {
+		panic("fs: RegisterObjectStore name must not be empty")
+	}
+	if factory == nil {
+		panic("fs: RegisterObjectStore factory must not be nil")
+	}
+
 	mu.Lock()
 	defer mu.Unlock()
+	if _, exists := factories[name]; exists {
+		panic(fmt.Sprintf("fs: object store %q already registered", name))
+	}
 	factories[name] = factory
 }
 

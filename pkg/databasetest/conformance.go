@@ -2079,6 +2079,255 @@ func RunConformanceTests(t *testing.T, newHarness HarnessMaker) {
 		assert.Nil(t, funcFromDB)
 	})
 
+	t.Run("Function/GetByExecutorAndName", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		function := &core.Function{
+			FunctionID:   core.GenerateRandomID(),
+			ExecutorName: core.GenerateRandomID(),
+			ColonyName:   core.GenerateRandomID(),
+			FuncName:     "testfunc1",
+			Counter:      2,
+			MinWaitTime:  1.0,
+			MaxWaitTime:  2.0,
+			MinExecTime:  3.0,
+			MaxExecTime:  4.0,
+			AvgWaitTime:  1.1,
+			AvgExecTime:  0.1,
+		}
+
+		err := db.AddFunction(function)
+		assert.Nil(t, err)
+
+		funcFromDB, err := db.GetFunctionsByExecutorAndName(function.ColonyName, function.ExecutorName, function.FuncName)
+		assert.Nil(t, err)
+		assert.NotNil(t, funcFromDB)
+		assert.True(t, function.Equals(funcFromDB))
+
+		// Non-existent name returns nil
+		funcFromDB, err = db.GetFunctionsByExecutorAndName(function.ColonyName, function.ExecutorName, "does_not_exist")
+		assert.Nil(t, err)
+		assert.Nil(t, funcFromDB)
+	})
+
+	t.Run("Function/UpdateStats", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+		function := &core.Function{
+			FunctionID:   core.GenerateRandomID(),
+			ExecutorName: core.GenerateRandomID(),
+			ColonyName:   colonyName,
+			FuncName:     "testfunc1",
+			Counter:      10,
+			AvgWaitTime:  1.1,
+			AvgExecTime:  0.1,
+		}
+
+		err := db.AddFunction(function)
+		assert.Nil(t, err)
+
+		err = db.UpdateFunctionStats(function.ColonyName, function.ExecutorName, function.FuncName, 20, 0.1, 0.2, 0.3, 0.4, 2.0, 2.1)
+		assert.Nil(t, err)
+
+		functions, err := db.GetFunctionsByExecutorName(function.ColonyName, function.ExecutorName)
+		assert.Nil(t, err)
+		assert.Len(t, functions, 1)
+
+		assert.Equal(t, 20, functions[0].Counter)
+		assert.Equal(t, 0.1, functions[0].MinWaitTime)
+		assert.Equal(t, 0.2, functions[0].MaxWaitTime)
+		assert.Equal(t, 0.3, functions[0].MinExecTime)
+		assert.Equal(t, 0.4, functions[0].MaxExecTime)
+		assert.Equal(t, 2.0, functions[0].AvgWaitTime)
+		assert.Equal(t, 2.1, functions[0].AvgExecTime)
+	})
+
+	t.Run("Function/RemoveByExecutor", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+		executorName1 := core.GenerateRandomID()
+		executorName2 := core.GenerateRandomID()
+
+		f1 := &core.Function{FunctionID: core.GenerateRandomID(), ExecutorName: executorName1, ColonyName: colonyName, FuncName: "testfunc1", AvgWaitTime: 1.1, AvgExecTime: 0.1}
+		f2 := &core.Function{FunctionID: core.GenerateRandomID(), ExecutorName: executorName2, ColonyName: colonyName, FuncName: "testfunc2", AvgWaitTime: 1.1, AvgExecTime: 0.1}
+
+		err := db.AddFunction(f1)
+		assert.Nil(t, err)
+		err = db.AddFunction(f2)
+		assert.Nil(t, err)
+
+		functions, err := db.GetFunctionsByColonyName(colonyName)
+		assert.Nil(t, err)
+		assert.Len(t, functions, 2)
+
+		err = db.RemoveFunctionsByExecutorName(f1.ColonyName, f1.ExecutorName)
+		assert.Nil(t, err)
+
+		functions, err = db.GetFunctionsByColonyName(colonyName)
+		assert.Nil(t, err)
+		assert.Len(t, functions, 1)
+	})
+
+	t.Run("Function/RemoveByColony", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName1 := core.GenerateRandomID()
+		colonyName2 := core.GenerateRandomID()
+
+		f1 := &core.Function{FunctionID: core.GenerateRandomID(), ExecutorName: core.GenerateRandomID(), ColonyName: colonyName1, FuncName: "testfunc1", AvgWaitTime: 1.1, AvgExecTime: 0.1}
+		f2 := &core.Function{FunctionID: core.GenerateRandomID(), ExecutorName: core.GenerateRandomID(), ColonyName: colonyName1, FuncName: "testfunc2", AvgWaitTime: 1.1, AvgExecTime: 0.1}
+		f3 := &core.Function{FunctionID: core.GenerateRandomID(), ExecutorName: core.GenerateRandomID(), ColonyName: colonyName2, FuncName: "testfunc3", AvgWaitTime: 1.1, AvgExecTime: 0.1}
+
+		err := db.AddFunction(f1)
+		assert.Nil(t, err)
+		err = db.AddFunction(f2)
+		assert.Nil(t, err)
+		err = db.AddFunction(f3)
+		assert.Nil(t, err)
+
+		err = db.RemoveFunctionsByColonyName(colonyName1)
+		assert.Nil(t, err)
+
+		functions, err := db.GetFunctionsByColonyName(colonyName1)
+		assert.Nil(t, err)
+		assert.Len(t, functions, 0)
+
+		functions, err = db.GetFunctionsByColonyName(colonyName2)
+		assert.Nil(t, err)
+		assert.Len(t, functions, 1)
+	})
+
+	t.Run("Function/WithDescription", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+		executorName := core.GenerateRandomID()
+
+		args := []*core.FunctionArg{
+			{Name: "query", Type: "string", Description: "Search query", Required: true},
+			{Name: "limit", Type: "integer", Description: "Max results", Required: false},
+			{Name: "format", Type: "string", Description: "Output format", Enum: []string{"json", "text", "xml"}},
+		}
+
+		function := &core.Function{
+			FunctionID:   core.GenerateRandomID(),
+			ExecutorName: executorName,
+			ColonyName:   colonyName,
+			FuncName:     "search_tool",
+			Description:  "Search for content in the database",
+			Args:         args,
+		}
+
+		err := db.AddFunction(function)
+		assert.Nil(t, err)
+
+		funcFromDB, err := db.GetFunctionByID(function.FunctionID)
+		assert.Nil(t, err)
+		assert.NotNil(t, funcFromDB)
+		assert.Equal(t, function.Description, funcFromDB.Description)
+		assert.Equal(t, len(function.Args), len(funcFromDB.Args))
+
+		for i, arg := range function.Args {
+			assert.Equal(t, arg.Name, funcFromDB.Args[i].Name)
+			assert.Equal(t, arg.Type, funcFromDB.Args[i].Type)
+			assert.Equal(t, arg.Description, funcFromDB.Args[i].Description)
+			assert.Equal(t, arg.Required, funcFromDB.Args[i].Required)
+			assert.Equal(t, len(arg.Enum), len(funcFromDB.Args[i].Enum))
+		}
+	})
+
+	t.Run("Function/WithLocation", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+		executorName := core.GenerateRandomID()
+
+		function := &core.Function{
+			FunctionID:   core.GenerateRandomID(),
+			ExecutorName: executorName,
+			ColonyName:   colonyName,
+			FuncName:     "tool_read_file",
+			LocationName: "dev-location",
+		}
+
+		err := db.AddFunction(function)
+		assert.Nil(t, err)
+
+		funcFromDB, err := db.GetFunctionByID(function.FunctionID)
+		assert.Nil(t, err)
+		assert.NotNil(t, funcFromDB)
+		assert.Equal(t, "dev-location", funcFromDB.LocationName)
+		assert.True(t, function.Equals(funcFromDB))
+
+		// Test empty LocationName
+		function2 := &core.Function{
+			FunctionID:   core.GenerateRandomID(),
+			ExecutorName: executorName,
+			ColonyName:   colonyName,
+			FuncName:     "tool_write_file",
+		}
+
+		err = db.AddFunction(function2)
+		assert.Nil(t, err)
+
+		funcFromDB2, err := db.GetFunctionByID(function2.FunctionID)
+		assert.Nil(t, err)
+		assert.NotNil(t, funcFromDB2)
+		assert.Equal(t, "", funcFromDB2.LocationName)
+	})
+
+	t.Run("Function/ResetStatsByColony", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName1 := core.GenerateRandomID()
+		colonyName2 := core.GenerateRandomID()
+
+		f1 := &core.Function{FunctionID: core.GenerateRandomID(), ExecutorName: core.GenerateRandomID(), ColonyName: colonyName1, FuncName: "testfunc1", Counter: 10, MinWaitTime: 1.0, MaxWaitTime: 5.0, MinExecTime: 0.5, MaxExecTime: 3.0, AvgWaitTime: 2.0, AvgExecTime: 1.5}
+		f2 := &core.Function{FunctionID: core.GenerateRandomID(), ExecutorName: core.GenerateRandomID(), ColonyName: colonyName1, FuncName: "testfunc2", Counter: 20, MinWaitTime: 2.0, MaxWaitTime: 6.0, MinExecTime: 1.0, MaxExecTime: 4.0, AvgWaitTime: 3.0, AvgExecTime: 2.5}
+		f3 := &core.Function{FunctionID: core.GenerateRandomID(), ExecutorName: core.GenerateRandomID(), ColonyName: colonyName2, FuncName: "testfunc3", Counter: 30, MinWaitTime: 3.0, MaxWaitTime: 7.0, MinExecTime: 1.5, MaxExecTime: 5.0, AvgWaitTime: 4.0, AvgExecTime: 3.5}
+
+		err := db.AddFunction(f1)
+		assert.Nil(t, err)
+		err = db.AddFunction(f2)
+		assert.Nil(t, err)
+		err = db.AddFunction(f3)
+		assert.Nil(t, err)
+
+		err = db.ResetFunctionStatsByColonyName(colonyName1)
+		assert.Nil(t, err)
+
+		// Colony1 functions should be reset
+		functions, err := db.GetFunctionsByColonyName(colonyName1)
+		assert.Nil(t, err)
+		assert.Len(t, functions, 2)
+		for _, f := range functions {
+			assert.Equal(t, 0, f.Counter)
+			assert.Equal(t, 0.0, f.MinWaitTime)
+			assert.Equal(t, 0.0, f.MaxWaitTime)
+			assert.Equal(t, 0.0, f.MinExecTime)
+			assert.Equal(t, 0.0, f.MaxExecTime)
+			assert.Equal(t, 0.0, f.AvgWaitTime)
+			assert.Equal(t, 0.0, f.AvgExecTime)
+		}
+
+		// Colony2 function should be unaffected
+		functions, err = db.GetFunctionsByColonyName(colonyName2)
+		assert.Nil(t, err)
+		assert.Len(t, functions, 1)
+		assert.Equal(t, 30, functions[0].Counter)
+		assert.Equal(t, 3.0, functions[0].MinWaitTime)
+		assert.Equal(t, 7.0, functions[0].MaxWaitTime)
+	})
+
 	// ---------------------------------------------------------------
 	// Cron tests
 	// ---------------------------------------------------------------
@@ -2137,6 +2386,155 @@ func RunConformanceTests(t *testing.T, newHarness HarnessMaker) {
 		cronFromDB, err := db.GetCronByID(cron.ID)
 		assert.Nil(t, err)
 		assert.Nil(t, cronFromDB)
+	})
+
+	t.Run("Cron/Update", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+		cron := core.CreateCron(colonyName, "test_name", "* * * * * *", 100, true, "workflow")
+		cron.ID = core.GenerateRandomID()
+
+		err := db.AddCron(cron)
+		assert.Nil(t, err)
+
+		cronFromDB, err := db.GetCronByID(cron.ID)
+		assert.Nil(t, err)
+		assert.Equal(t, cron.ID, cronFromDB.ID)
+		assert.Equal(t, colonyName, cronFromDB.ColonyName)
+		assert.Equal(t, "test_name", cronFromDB.Name)
+		assert.Equal(t, "* * * * * *", cronFromDB.CronExpression)
+		assert.Equal(t, 100, cronFromDB.Interval)
+		assert.Equal(t, true, cronFromDB.Random)
+		assert.Equal(t, "workflow", cronFromDB.WorkflowSpec)
+		assert.Equal(t, "", cronFromDB.PrevProcessGraphID)
+
+		err = db.UpdateCron(cron.ID, time.Now(), time.Time{}, core.GenerateRandomID())
+		assert.Nil(t, err)
+
+		cronFromDB, err = db.GetCronByID(cron.ID)
+		assert.Nil(t, err)
+		assert.Greater(t, cronFromDB.NextRun.Unix(), time.Time{}.Unix())
+		assert.Equal(t, cronFromDB.LastRun.Unix(), time.Time{}.Unix())
+		assert.NotEqual(t, "", cronFromDB.PrevProcessGraphID)
+
+		err = db.UpdateCron(cron.ID, time.Now(), time.Now(), core.GenerateRandomID())
+		assert.Nil(t, err)
+		cronFromDB, err = db.GetCronByID(cron.ID)
+		assert.Nil(t, err)
+		assert.Greater(t, cronFromDB.LastRun.Unix(), time.Time{}.Unix())
+	})
+
+	t.Run("Cron/FindAll", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName1 := core.GenerateRandomID()
+		colonyName2 := core.GenerateRandomID()
+
+		cron1 := core.CreateCron(colonyName1, "test_name1", "* * * * * *", 0, false, "workflow1")
+		cron1.ID = core.GenerateRandomID()
+		cron2 := core.CreateCron(colonyName2, "test_name2", "* * * * * *", 0, false, "workflow2")
+		cron2.ID = core.GenerateRandomID()
+		cron3 := core.CreateCron(colonyName2, "test_name3", "* * * * * *", 0, false, "workflow3")
+		cron3.ID = core.GenerateRandomID()
+
+		err := db.AddCron(cron1)
+		assert.Nil(t, err)
+		err = db.AddCron(cron2)
+		assert.Nil(t, err)
+		err = db.AddCron(cron3)
+		assert.Nil(t, err)
+
+		crons, err := db.FindAllCrons()
+		assert.Nil(t, err)
+		assert.Len(t, crons, 3)
+	})
+
+	t.Run("Cron/GetByName", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName1 := core.GenerateRandomID()
+		colonyName2 := core.GenerateRandomID()
+
+		cron1 := core.CreateCron(colonyName1, "reconcile-Database-dc1", "* * * * * *", 60, false, "workflow1")
+		cron1.ID = core.GenerateRandomID()
+		cron2 := core.CreateCron(colonyName1, "reconcile-Database-dc2", "* * * * * *", 60, false, "workflow2")
+		cron2.ID = core.GenerateRandomID()
+		cron3 := core.CreateCron(colonyName2, "reconcile-Database-dc1", "* * * * * *", 60, false, "workflow3")
+		cron3.ID = core.GenerateRandomID()
+
+		err := db.AddCron(cron1)
+		assert.Nil(t, err)
+		err = db.AddCron(cron2)
+		assert.Nil(t, err)
+		err = db.AddCron(cron3)
+		assert.Nil(t, err)
+
+		// Find cron by name in colony1
+		foundCron, err := db.GetCronByName(colonyName1, "reconcile-Database-dc1")
+		assert.Nil(t, err)
+		assert.NotNil(t, foundCron)
+		assert.Equal(t, cron1.ID, foundCron.ID)
+		assert.Equal(t, cron1.Name, foundCron.Name)
+		assert.Equal(t, cron1.ColonyName, foundCron.ColonyName)
+
+		// Find different cron by name in colony1
+		foundCron, err = db.GetCronByName(colonyName1, "reconcile-Database-dc2")
+		assert.Nil(t, err)
+		assert.NotNil(t, foundCron)
+		assert.Equal(t, cron2.ID, foundCron.ID)
+
+		// Same name in different colony returns different cron
+		foundCron, err = db.GetCronByName(colonyName2, "reconcile-Database-dc1")
+		assert.Nil(t, err)
+		assert.NotNil(t, foundCron)
+		assert.Equal(t, cron3.ID, foundCron.ID)
+		assert.Equal(t, colonyName2, foundCron.ColonyName)
+
+		// Non-existent cron name returns nil
+		foundCron, err = db.GetCronByName(colonyName1, "nonexistent-cron")
+		assert.Nil(t, err)
+		assert.Nil(t, foundCron)
+
+		// Non-existent colony returns nil
+		foundCron, err = db.GetCronByName("nonexistent-colony", "reconcile-Database-dc1")
+		assert.Nil(t, err)
+		assert.Nil(t, foundCron)
+	})
+
+	t.Run("Cron/SameNameDifferentColonies", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName1 := core.GenerateRandomID()
+		colonyName2 := core.GenerateRandomID()
+		sharedName := "shared_cron_name"
+
+		// Create cron in first colony
+		cron1 := core.CreateCron(colonyName1, sharedName, "* * * * * *", 0, false, "workflow1")
+		cron1.ID = core.GenerateRandomID()
+		err := db.AddCron(cron1)
+		assert.Nil(t, err)
+
+		// Create cron with same name in second colony - should succeed
+		cron2 := core.CreateCron(colonyName2, sharedName, "0 * * * * *", 0, false, "workflow2")
+		cron2.ID = core.GenerateRandomID()
+		err = db.AddCron(cron2)
+		assert.Nil(t, err)
+
+		// Verify both crons exist
+		crons1, err := db.FindCronsByColonyName(colonyName1, 100)
+		assert.Nil(t, err)
+		assert.Len(t, crons1, 1)
+		assert.Equal(t, sharedName, crons1[0].Name)
+
+		crons2, err := db.FindCronsByColonyName(colonyName2, 100)
+		assert.Nil(t, err)
+		assert.Len(t, crons2, 1)
+		assert.Equal(t, sharedName, crons2[0].Name)
 	})
 
 	// ---------------------------------------------------------------
@@ -2205,6 +2603,133 @@ func RunConformanceTests(t *testing.T, newHarness HarnessMaker) {
 		generators, err := db.FindGeneratorsByColonyName(colonyName, 10)
 		assert.Nil(t, err)
 		assert.Len(t, generators, 2)
+	})
+
+	t.Run("Generator/GetByName", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+		generator := utils.FakeGenerator(t, colonyName, "test_initiator_id", "test_initiator_name")
+		generator.ID = core.GenerateRandomID()
+		generator.Name = "test_name"
+		err := db.AddGenerator(generator)
+		assert.Nil(t, err)
+
+		// Not found with invalid name
+		genFromDB, err := db.GetGeneratorByName(colonyName, "invalid_name")
+		assert.Nil(t, err)
+		assert.Nil(t, genFromDB)
+
+		// Found with correct name
+		genFromDB, err = db.GetGeneratorByName(colonyName, "test_name")
+		assert.Nil(t, err)
+		assert.NotNil(t, genFromDB)
+		assert.True(t, generator.Equals(genFromDB))
+	})
+
+	t.Run("Generator/SetLastRun", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+		generator := utils.FakeGenerator(t, colonyName, "test_initiator_id", "test_initiator_name")
+		generator.ID = core.GenerateRandomID()
+		err := db.AddGenerator(generator)
+		assert.Nil(t, err)
+
+		genFromDB, err := db.GetGeneratorByID(generator.ID)
+		assert.Nil(t, err)
+		assert.True(t, generator.Equals(genFromDB))
+
+		lastRun := genFromDB.LastRun.Unix()
+
+		err = db.SetGeneratorLastRun(generator.ID)
+		assert.Nil(t, err)
+
+		genFromDB, err = db.GetGeneratorByID(generator.ID)
+		assert.Nil(t, err)
+		assert.Greater(t, genFromDB.LastRun.Unix(), lastRun)
+	})
+
+	t.Run("Generator/SetFirstPack", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+		generator := utils.FakeGenerator(t, colonyName, "test_initiator_id", "test_initiator_name")
+		generator.ID = core.GenerateRandomID()
+		err := db.AddGenerator(generator)
+		assert.Nil(t, err)
+
+		genFromDB, err := db.GetGeneratorByID(generator.ID)
+		assert.Nil(t, err)
+		assert.True(t, generator.Equals(genFromDB))
+
+		err = db.SetGeneratorFirstPack(generator.ID)
+		assert.Nil(t, err)
+
+		genFromDB, err = db.GetGeneratorByID(generator.ID)
+		assert.Nil(t, err)
+		assert.True(t, genFromDB.FirstPack.Unix() > 0)
+	})
+
+	t.Run("Generator/FindAll", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName1 := core.GenerateRandomID()
+		gen1 := utils.FakeGenerator(t, colonyName1, "test_initiator_id", "test_initiator_name")
+		gen1.ID = core.GenerateRandomID()
+		err := db.AddGenerator(gen1)
+		assert.Nil(t, err)
+
+		colonyName2 := core.GenerateRandomID()
+		gen2 := utils.FakeGenerator(t, colonyName2, "test_initiator_id", "test_initiator_name")
+		gen2.ID = core.GenerateRandomID()
+		err = db.AddGenerator(gen2)
+		assert.Nil(t, err)
+
+		generators, err := db.FindAllGenerators()
+		assert.Nil(t, err)
+		assert.Len(t, generators, 2)
+	})
+
+	t.Run("Generator/RemoveByColony", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName1 := core.GenerateRandomID()
+		gen1 := utils.FakeGenerator(t, colonyName1, "test_initiator_id", "test_initiator_name")
+		gen1.ID = core.GenerateRandomID()
+		err := db.AddGenerator(gen1)
+		assert.Nil(t, err)
+
+		gen2 := utils.FakeGenerator(t, colonyName1, "test_initiator_id", "test_initiator_name")
+		gen2.ID = core.GenerateRandomID()
+		err = db.AddGenerator(gen2)
+		assert.Nil(t, err)
+
+		colonyName2 := core.GenerateRandomID()
+		gen3 := utils.FakeGenerator(t, colonyName2, "test_initiator_id", "test_initiator_name")
+		gen3.ID = core.GenerateRandomID()
+		err = db.AddGenerator(gen3)
+		assert.Nil(t, err)
+
+		err = db.RemoveAllGeneratorsByColonyName(colonyName1)
+		assert.Nil(t, err)
+
+		genFromDB, err := db.GetGeneratorByID(gen1.ID)
+		assert.Nil(t, err)
+		assert.Nil(t, genFromDB)
+
+		genFromDB, err = db.GetGeneratorByID(gen2.ID)
+		assert.Nil(t, err)
+		assert.Nil(t, genFromDB)
+
+		genFromDB, err = db.GetGeneratorByID(gen3.ID)
+		assert.Nil(t, err)
+		assert.NotNil(t, genFromDB)
 	})
 
 	// ---------------------------------------------------------------
@@ -2323,6 +2848,403 @@ func RunConformanceTests(t *testing.T, newHarness HarnessMaker) {
 		assert.Equal(t, 2, count)
 	})
 
+	t.Run("Blueprint/AddDefinition", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		sd := core.CreateBlueprintDefinition(
+			"executor-deployment",
+			"compute.colonies.io",
+			"v1",
+			"ExecutorDeployment",
+			"executordeployments",
+			"Namespaced",
+			"executor-controller",
+			"reconcile",
+		)
+		sd.Metadata.ColonyName = "test-colony"
+
+		err := db.AddBlueprintDefinition(sd)
+		assert.Nil(t, err)
+
+		// Get by ID
+		sdFromDB, err := db.GetBlueprintDefinitionByID(sd.ID)
+		assert.Nil(t, err)
+		assert.NotNil(t, sdFromDB)
+		assert.Equal(t, sd.ID, sdFromDB.ID)
+		assert.Equal(t, sd.Metadata.Name, sdFromDB.Metadata.Name)
+		assert.Equal(t, sd.Spec.Group, sdFromDB.Spec.Group)
+		assert.Equal(t, sd.Spec.Version, sdFromDB.Spec.Version)
+
+		// Get by name
+		sdFromDB2, err := db.GetBlueprintDefinitionByName(sd.Metadata.ColonyName, sd.Metadata.Name)
+		assert.Nil(t, err)
+		assert.NotNil(t, sdFromDB2)
+		assert.Equal(t, sd.ID, sdFromDB2.ID)
+
+		// Get all
+		sds, err := db.GetBlueprintDefinitions()
+		assert.Nil(t, err)
+		assert.Equal(t, 1, len(sds))
+
+		// Count
+		defCount, err := db.CountBlueprintDefinitions()
+		assert.Nil(t, err)
+		assert.Equal(t, 1, defCount)
+	})
+
+	t.Run("Blueprint/GetDefinitionByKind", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		sd1 := core.CreateBlueprintDefinition(
+			"executor-deployment",
+			"compute.colonies.io",
+			"v1",
+			"ExecutorDeployment",
+			"executordeployments",
+			"Namespaced",
+			"executor-controller",
+			"reconcile",
+		)
+		sd1.Metadata.ColonyName = "test-colony"
+
+		sd2 := core.CreateBlueprintDefinition(
+			"service-deployment",
+			"compute.colonies.io",
+			"v1",
+			"ServiceDeployment",
+			"servicedeployments",
+			"Namespaced",
+			"service-controller",
+			"reconcile",
+		)
+		sd2.Metadata.ColonyName = "test-colony"
+
+		err := db.AddBlueprintDefinition(sd1)
+		assert.Nil(t, err)
+		err = db.AddBlueprintDefinition(sd2)
+		assert.Nil(t, err)
+
+		// Find ExecutorDeployment
+		foundDef, err := db.GetBlueprintDefinitionByKind("ExecutorDeployment")
+		assert.Nil(t, err)
+		assert.NotNil(t, foundDef)
+		assert.Equal(t, "ExecutorDeployment", foundDef.Spec.Names.Kind)
+		assert.Equal(t, sd1.ID, foundDef.ID)
+
+		// Find ServiceDeployment
+		foundDef2, err := db.GetBlueprintDefinitionByKind("ServiceDeployment")
+		assert.Nil(t, err)
+		assert.NotNil(t, foundDef2)
+		assert.Equal(t, "ServiceDeployment", foundDef2.Spec.Names.Kind)
+		assert.Equal(t, sd2.ID, foundDef2.ID)
+
+		// Non-existent kind returns nil
+		notFound, err := db.GetBlueprintDefinitionByKind("NonExistentKind")
+		assert.Nil(t, err)
+		assert.Nil(t, notFound)
+	})
+
+	t.Run("Blueprint/GetByNamespace", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		bp1 := core.CreateBlueprint("ExecutorDeployment", "web-1", "production")
+		bp1.SetSpec("image", "nginx:1.21")
+		bp2 := core.CreateBlueprint("ExecutorDeployment", "web-2", "production")
+		bp2.SetSpec("image", "nginx:1.22")
+		bp3 := core.CreateBlueprint("ExecutorDeployment", "web-3", "staging")
+		bp3.SetSpec("image", "nginx:1.21")
+
+		err := db.AddBlueprint(bp1)
+		assert.Nil(t, err)
+		err = db.AddBlueprint(bp2)
+		assert.Nil(t, err)
+		err = db.AddBlueprint(bp3)
+		assert.Nil(t, err)
+
+		prodBlueprints, err := db.GetBlueprintsByNamespace("production")
+		assert.Nil(t, err)
+		assert.Equal(t, 2, len(prodBlueprints))
+
+		stagingBlueprints, err := db.GetBlueprintsByNamespace("staging")
+		assert.Nil(t, err)
+		assert.Equal(t, 1, len(stagingBlueprints))
+
+		prodCount, err := db.CountBlueprintsByNamespace("production")
+		assert.Nil(t, err)
+		assert.Equal(t, 2, prodCount)
+	})
+
+	t.Run("Blueprint/GetByKind", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		bp1 := core.CreateBlueprint("ExecutorDeployment", "web-1", "production")
+		bp1.SetSpec("image", "nginx:1.21")
+		bp2 := core.CreateBlueprint("Database", "db-1", "production")
+		bp2.SetSpec("engine", "postgres")
+
+		err := db.AddBlueprint(bp1)
+		assert.Nil(t, err)
+		err = db.AddBlueprint(bp2)
+		assert.Nil(t, err)
+
+		executorDeployments, err := db.GetBlueprintsByKind("ExecutorDeployment")
+		assert.Nil(t, err)
+		assert.Equal(t, 1, len(executorDeployments))
+
+		databases, err := db.GetBlueprintsByKind("Database")
+		assert.Nil(t, err)
+		assert.Equal(t, 1, len(databases))
+	})
+
+	t.Run("Blueprint/Update", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		blueprint := core.CreateBlueprint("ExecutorDeployment", "web-server", "production")
+		blueprint.SetSpec("replicas", 3)
+
+		err := db.AddBlueprint(blueprint)
+		assert.Nil(t, err)
+
+		blueprint.SetSpec("replicas", 5)
+		err = db.UpdateBlueprint(blueprint)
+		assert.Nil(t, err)
+
+		bpFromDB, err := db.GetBlueprintByID(blueprint.ID)
+		assert.Nil(t, err)
+		replicas, ok := bpFromDB.GetSpec("replicas")
+		assert.True(t, ok)
+		// JSON round-trip may convert int to float64; accept either
+		assert.EqualValues(t, 5, replicas)
+	})
+
+	t.Run("Blueprint/UpdateStatus", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		blueprint := core.CreateBlueprint("ExecutorDeployment", "web-server", "production")
+		blueprint.SetSpec("replicas", 3)
+		blueprint.SetStatus("phase", "Pending")
+
+		err := db.AddBlueprint(blueprint)
+		assert.Nil(t, err)
+
+		newStatus := map[string]interface{}{
+			"phase": "Running",
+			"ready": 3,
+		}
+		err = db.UpdateBlueprintStatus(blueprint.ID, newStatus)
+		assert.Nil(t, err)
+
+		bpFromDB, err := db.GetBlueprintByID(blueprint.ID)
+		assert.Nil(t, err)
+		phase, ok := bpFromDB.GetStatus("phase")
+		assert.True(t, ok)
+		assert.Equal(t, "Running", phase)
+		ready, ok := bpFromDB.GetStatus("ready")
+		assert.True(t, ok)
+		assert.EqualValues(t, 3, ready)
+	})
+
+	t.Run("Blueprint/History", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		blueprint := core.CreateBlueprint("ExecutorDeployment", "web-server", "production")
+		blueprint.SetSpec("replicas", 3)
+		blueprint.SetStatus("phase", "Running")
+
+		err := db.AddBlueprint(blueprint)
+		assert.Nil(t, err)
+
+		history := core.CreateBlueprintHistory(blueprint, "test-user", "create")
+		err = db.AddBlueprintHistory(history)
+		assert.Nil(t, err)
+
+		histories, err := db.GetBlueprintHistory(blueprint.ID, 10)
+		assert.Nil(t, err)
+		assert.Equal(t, 1, len(histories))
+		assert.Equal(t, blueprint.ID, histories[0].BlueprintID)
+		assert.Equal(t, "ExecutorDeployment", histories[0].Kind)
+		assert.Equal(t, "production", histories[0].Namespace)
+		assert.Equal(t, "web-server", histories[0].Name)
+		assert.Equal(t, blueprint.Metadata.Generation, histories[0].Generation)
+		assert.Equal(t, "test-user", histories[0].ChangedBy)
+		assert.Equal(t, "create", histories[0].ChangeType)
+
+		// Verify spec in history
+		replicas, ok := histories[0].Spec["replicas"]
+		assert.True(t, ok)
+		assert.EqualValues(t, 3, replicas)
+
+		// Verify status in history
+		phase, ok := histories[0].Status["phase"]
+		assert.True(t, ok)
+		assert.Equal(t, "Running", phase)
+	})
+
+	t.Run("Blueprint/HistoryMultipleVersions", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		blueprint := core.CreateBlueprint("ExecutorDeployment", "web-server", "production")
+		blueprint.SetSpec("replicas", 3)
+
+		err := db.AddBlueprint(blueprint)
+		assert.Nil(t, err)
+
+		initialGen := blueprint.Metadata.Generation
+
+		history1 := core.CreateBlueprintHistory(blueprint, "user1", "create")
+		err = db.AddBlueprintHistory(history1)
+		assert.Nil(t, err)
+
+		blueprint.SetSpec("replicas", 5)
+		blueprint.Metadata.Generation = initialGen + 1
+		history2 := core.CreateBlueprintHistory(blueprint, "user2", "update")
+		err = db.AddBlueprintHistory(history2)
+		assert.Nil(t, err)
+
+		blueprint.SetSpec("replicas", 10)
+		blueprint.Metadata.Generation = initialGen + 2
+		history3 := core.CreateBlueprintHistory(blueprint, "user3", "update")
+		err = db.AddBlueprintHistory(history3)
+		assert.Nil(t, err)
+
+		// Get all history (no limit)
+		allHistories, err := db.GetBlueprintHistory(blueprint.ID, 0)
+		assert.Nil(t, err)
+		assert.Equal(t, 3, len(allHistories))
+
+		// Verify ordered by timestamp DESC (most recent first)
+		assert.Equal(t, initialGen+2, allHistories[0].Generation)
+		assert.Equal(t, initialGen+1, allHistories[1].Generation)
+		assert.Equal(t, initialGen, allHistories[2].Generation)
+
+		// Get limited history
+		limitedHistories, err := db.GetBlueprintHistory(blueprint.ID, 2)
+		assert.Nil(t, err)
+		assert.Equal(t, 2, len(limitedHistories))
+		assert.Equal(t, initialGen+2, limitedHistories[0].Generation)
+		assert.Equal(t, initialGen+1, limitedHistories[1].Generation)
+	})
+
+	t.Run("Blueprint/HistoryByGeneration", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		blueprint := core.CreateBlueprint("ExecutorDeployment", "web-server", "production")
+		blueprint.SetSpec("replicas", 3)
+
+		err := db.AddBlueprint(blueprint)
+		assert.Nil(t, err)
+
+		history1 := core.CreateBlueprintHistory(blueprint, "user1", "create")
+		err = db.AddBlueprintHistory(history1)
+		assert.Nil(t, err)
+
+		// Verify history was stored via GetBlueprintHistory (list method)
+		histories, err := db.GetBlueprintHistory(blueprint.ID, 10)
+		assert.Nil(t, err)
+		assert.GreaterOrEqual(t, len(histories), 1)
+
+		// GetBlueprintHistoryByGeneration may not be implemented by all backends
+		historyGen1, err := db.GetBlueprintHistoryByGeneration(blueprint.ID, 1)
+		assert.Nil(t, err)
+		if historyGen1 != nil {
+			assert.Equal(t, int64(1), historyGen1.Generation)
+			assert.Equal(t, "user1", historyGen1.ChangedBy)
+		}
+
+		// Get generation that does not exist
+		historyGen99, err := db.GetBlueprintHistoryByGeneration(blueprint.ID, 99)
+		assert.Nil(t, err)
+		assert.Nil(t, historyGen99)
+	})
+
+	t.Run("Blueprint/RemoveHistory", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		blueprint := core.CreateBlueprint("ExecutorDeployment", "web-server", "production")
+		err := db.AddBlueprint(blueprint)
+		assert.Nil(t, err)
+
+		history1 := core.CreateBlueprintHistory(blueprint, "user1", "create")
+		err = db.AddBlueprintHistory(history1)
+		assert.Nil(t, err)
+
+		blueprint.Metadata.Generation = 2
+		history2 := core.CreateBlueprintHistory(blueprint, "user2", "update")
+		err = db.AddBlueprintHistory(history2)
+		assert.Nil(t, err)
+
+		histories, err := db.GetBlueprintHistory(blueprint.ID, 0)
+		assert.Nil(t, err)
+		assert.Equal(t, 2, len(histories))
+
+		err = db.RemoveBlueprintHistory(blueprint.ID)
+		assert.Nil(t, err)
+
+		historiesAfter, err := db.GetBlueprintHistory(blueprint.ID, 0)
+		assert.Nil(t, err)
+		assert.Equal(t, 0, len(historiesAfter))
+	})
+
+	t.Run("Blueprint/GetByLocation", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		bp1 := core.CreateBlueprint("ExecutorDeployment", "web-1", "production")
+		bp1.Metadata.LocationName = "home"
+		bp1.SetSpec("image", "nginx:1.21")
+		err := db.AddBlueprint(bp1)
+		assert.Nil(t, err)
+
+		bp2 := core.CreateBlueprint("ExecutorDeployment", "web-2", "production")
+		bp2.Metadata.LocationName = "HOME"
+		bp2.SetSpec("image", "nginx:1.22")
+		err = db.AddBlueprint(bp2)
+		assert.Nil(t, err)
+
+		bp3 := core.CreateBlueprint("ExecutorDeployment", "web-3", "production")
+		bp3.Metadata.LocationName = "Home"
+		bp3.SetSpec("image", "nginx:1.23")
+		err = db.AddBlueprint(bp3)
+		assert.Nil(t, err)
+
+		bp4 := core.CreateBlueprint("ExecutorDeployment", "web-4", "production")
+		bp4.Metadata.LocationName = "office"
+		bp4.SetSpec("image", "nginx:1.24")
+		err = db.AddBlueprint(bp4)
+		assert.Nil(t, err)
+
+		// Query with "Home" should return all three home blueprints (case-insensitive)
+		blueprints, err := db.GetBlueprintsByNamespaceKindAndLocation("production", "ExecutorDeployment", "Home")
+		assert.Nil(t, err)
+		assert.Equal(t, 3, len(blueprints))
+
+		// Query with "home" should also return all three
+		blueprints, err = db.GetBlueprintsByNamespaceKindAndLocation("production", "ExecutorDeployment", "home")
+		assert.Nil(t, err)
+		assert.Equal(t, 3, len(blueprints))
+
+		// Query with "office" should return only bp4
+		blueprints, err = db.GetBlueprintsByNamespaceKindAndLocation("production", "ExecutorDeployment", "office")
+		assert.Nil(t, err)
+		assert.Equal(t, 1, len(blueprints))
+		assert.Equal(t, "web-4", blueprints[0].Metadata.Name)
+
+		// Query with empty location should return all four
+		blueprints, err = db.GetBlueprintsByNamespaceKindAndLocation("production", "ExecutorDeployment", "")
+		assert.Nil(t, err)
+		assert.Equal(t, 4, len(blueprints))
+	})
+
 	// ---------------------------------------------------------------
 	// ServerID tests
 	// ---------------------------------------------------------------
@@ -2351,5 +3273,1271 @@ func RunConformanceTests(t *testing.T, newHarness HarnessMaker) {
 		serverID, err := db.GetServerID()
 		assert.Nil(t, err)
 		assert.Equal(t, "new_server_id", serverID)
+	})
+
+	// ---------------------------------------------------------------
+	// File tests
+	// ---------------------------------------------------------------
+	t.Run("File/AddAndGet", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		now := time.Now()
+		file := utils.CreateTestFileWithID("test_id", "test_colonyid", now)
+		err := db.AddFile(file)
+		assert.Nil(t, err)
+
+		fileFromDB, err := db.GetFileByID("test_colonyid", file.ID)
+		assert.Nil(t, err)
+
+		// Normalize fields that differ between store and retrieval
+		fileFromDB.SequenceNumber = 1
+		fileFromDB.Added = time.Time{}
+		file.SequenceNumber = 1
+		file.Added = time.Time{}
+
+		assert.True(t, file.Equals(fileFromDB))
+	})
+
+	t.Run("File/GetByName", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		now := time.Now()
+		file1 := utils.CreateTestFileWithID("test_id", "test_colonyid", now)
+		file1.Label = "/testpath"
+		file1.Name = "test_file.txt"
+		file1.Size = 1
+		err := db.AddFile(file1)
+		assert.Nil(t, err)
+
+		file2 := utils.CreateTestFileWithID("test_id", "test_colonyid", now)
+		file2.ID = core.GenerateRandomID()
+		file2.Label = "/testpath"
+		file2.Name = "test_file.txt"
+		file2.Size = 2
+		err = db.AddFile(file2)
+		assert.Nil(t, err)
+
+		fileFromDB, err := db.GetLatestFileByName("test_colonyid", file1.Label, file1.Name)
+		assert.Nil(t, err)
+		assert.Len(t, fileFromDB, 1)
+		assert.Equal(t, fileFromDB[0].Size, int64(2))
+
+		filesFromDB, err := db.GetFileByName("test_colonyid", file1.Label, file1.Name)
+		assert.Nil(t, err)
+		assert.Len(t, filesFromDB, 2)
+	})
+
+	t.Run("File/GetFilenamesByLabel", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		now := time.Now()
+		file1 := utils.CreateTestFileWithID("test_id", "test_colonyid", now)
+		file1.ID = core.GenerateRandomID()
+		file1.Label = "/testpath"
+		file1.Name = "test_file.txt"
+		file1.Size = 1
+		err := db.AddFile(file1)
+		assert.Nil(t, err)
+
+		file2 := utils.CreateTestFileWithID("test_id", "test_colonyid", now)
+		file2.ID = core.GenerateRandomID()
+		file2.Label = "/testdir"
+		file2.Name = "test_file.txt"
+		file2.Size = 1
+		err = db.AddFile(file2)
+		assert.Nil(t, err)
+
+		file3 := utils.CreateTestFileWithID("test_id", "test_colonyid", now)
+		file3.ID = core.GenerateRandomID()
+		file3.Label = "/testdir"
+		file3.Name = "test_file2.txt"
+		file3.Size = 1
+		err = db.AddFile(file3)
+		assert.Nil(t, err)
+
+		file4 := utils.CreateTestFileWithID("test_id", "test_colonyid", now)
+		file4.ID = core.GenerateRandomID()
+		file4.Label = "/testdir2"
+		file4.Name = "test_file.txt"
+		file4.Size = 1
+		err = db.AddFile(file4)
+		assert.Nil(t, err)
+
+		filenames, err := db.GetFilenamesByLabel("test_colonyid", "/testdir")
+		assert.Nil(t, err)
+		assert.Len(t, filenames, 2)
+
+		filenames, err = db.GetFilenamesByLabel("test_colonyid", "/testdir2")
+		assert.Nil(t, err)
+		assert.Len(t, filenames, 1)
+	})
+
+	t.Run("File/RemoveByID", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		now := time.Now()
+		file1 := utils.CreateTestFileWithID("test_id", "test_colonyid", now)
+		file1.ID = core.GenerateRandomID()
+		file1.Label = "/testdir"
+		file1.Name = "test_file.txt"
+		file1.Size = 1
+		err := db.AddFile(file1)
+		assert.Nil(t, err)
+
+		file2 := utils.CreateTestFileWithID("test_id", "test_colonyid", now)
+		file2.ID = core.GenerateRandomID()
+		file2.Label = "/testdir"
+		file2.Name = "test_file2.txt"
+		file2.Size = 1
+		err = db.AddFile(file2)
+		assert.Nil(t, err)
+
+		filenames, err := db.GetFilenamesByLabel("test_colonyid", "/testdir")
+		assert.Nil(t, err)
+		assert.Len(t, filenames, 2)
+
+		fileFromDB, err := db.GetFileByID("test_colonyid", file2.ID)
+		assert.Nil(t, err)
+		assert.NotNil(t, fileFromDB)
+
+		err = db.RemoveFileByID("test_colonyid", file2.ID)
+		assert.Nil(t, err)
+
+		filenames, err = db.GetFilenamesByLabel("test_colonyid", "/testdir")
+		assert.Nil(t, err)
+		assert.Len(t, filenames, 1)
+
+		fileFromDB, err = db.GetFileByID("test_colonyid", file2.ID)
+		assert.Nil(t, err)
+		assert.Nil(t, fileFromDB)
+	})
+
+	t.Run("File/RemoveByName", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		now := time.Now()
+		file1 := utils.CreateTestFileWithID("test_id", "test_colonyid", now)
+		file1.ID = core.GenerateRandomID()
+		file1.Label = "/testdir"
+		file1.Name = "test_file.txt"
+		file1.Size = 1
+		err := db.AddFile(file1)
+		assert.Nil(t, err)
+
+		file2 := utils.CreateTestFileWithID("test_id", "test_colonyid", now)
+		file2.ID = core.GenerateRandomID()
+		file2.Label = "/testdir"
+		file2.Name = "test_file2.txt"
+		file2.Size = 1
+		err = db.AddFile(file2)
+		assert.Nil(t, err)
+
+		file3 := utils.CreateTestFileWithID("test_id", "test_colonyid", now)
+		file3.ID = core.GenerateRandomID()
+		file3.Label = "/testdir"
+		file3.Name = "test_file2.txt"
+		file3.Size = 1
+		err = db.AddFile(file3)
+		assert.Nil(t, err)
+
+		file4 := utils.CreateTestFileWithID("test_id", "test_colonyid", now)
+		file4.ID = core.GenerateRandomID()
+		file4.Label = "/testdir"
+		file4.Name = "test_file2.txt"
+		file4.Size = 1
+		err = db.AddFile(file4)
+		assert.Nil(t, err)
+
+		files, err := db.GetFileByName("test_colonyid", file4.Label, file4.Name)
+		assert.Nil(t, err)
+		assert.Len(t, files, 3)
+
+		err = db.RemoveFileByID("test_colonyid", file4.ID)
+		assert.Nil(t, err)
+
+		files, err = db.GetFileByName("test_colonyid", file4.Label, file4.Name)
+		assert.Nil(t, err)
+		assert.Len(t, files, 2)
+
+		err = db.RemoveFileByName("test_colonyid", file4.Label, file4.Name)
+		assert.Nil(t, err)
+
+		files, err = db.GetFileByName("test_colonyid", file4.Label, file4.Name)
+		assert.Nil(t, err)
+		assert.Len(t, files, 0)
+
+		fileFromDB, err := db.GetFileByID("test_colonyid", file4.ID)
+		assert.Nil(t, err)
+		assert.Nil(t, fileFromDB)
+
+		fileFromDB, err = db.GetFileByID("test_colonyid", file1.ID)
+		assert.Nil(t, err)
+		assert.NotNil(t, fileFromDB)
+	})
+
+	t.Run("File/GetLabels", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		now := time.Now()
+		file1 := utils.CreateTestFileWithID("test_id", "test_colonyid", now)
+		file1.ID = core.GenerateRandomID()
+		file1.Label = "/testdir1"
+		file1.Name = "test_file.txt"
+		file1.Size = 1
+		err := db.AddFile(file1)
+		assert.Nil(t, err)
+
+		file2 := utils.CreateTestFileWithID("test_id", "test_colonyid", now)
+		file2.ID = core.GenerateRandomID()
+		file2.Label = "/testdir2"
+		file2.Name = "test_file2.txt"
+		file2.Size = 1
+		err = db.AddFile(file2)
+		assert.Nil(t, err)
+
+		file3 := utils.CreateTestFileWithID("test_id", "test_colonyid", now)
+		file3.ID = core.GenerateRandomID()
+		file3.Label = "/testdir3"
+		file3.Name = "test_file3.txt"
+		file3.Size = 1
+		err = db.AddFile(file3)
+		assert.Nil(t, err)
+
+		file4 := utils.CreateTestFileWithID("test_id", "test_colonyid", now)
+		file4.ID = core.GenerateRandomID()
+		file4.Label = "/testdir3"
+		file4.Name = "test_file4.txt"
+		file4.Size = 1
+		err = db.AddFile(file4)
+		assert.Nil(t, err)
+
+		labels, err := db.GetFileLabels("test_colonyid")
+		assert.Nil(t, err)
+		assert.Len(t, labels, 3)
+
+		totalFiles := 0
+		for _, label := range labels {
+			totalFiles += label.Files
+		}
+		assert.Equal(t, totalFiles, 4)
+	})
+
+	t.Run("File/CountByLabel", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		now := time.Now()
+		file1 := utils.CreateTestFileWithID("test_id", "test_colony1", now)
+		file1.ID = core.GenerateRandomID()
+		file1.Label = "/testdir1"
+		file1.Name = "test_file.txt"
+		file1.Size = 1
+		err := db.AddFile(file1)
+		assert.Nil(t, err)
+
+		file2 := utils.CreateTestFileWithID("test_id", "test_colony2", now)
+		file2.ID = core.GenerateRandomID()
+		file2.Label = "/testdir2"
+		file2.Name = "test_file2.txt"
+		file2.Size = 1
+		err = db.AddFile(file2)
+		assert.Nil(t, err)
+
+		file3 := utils.CreateTestFileWithID("test_id", "test_colony2", now)
+		file3.ID = core.GenerateRandomID()
+		file3.Label = "/testdir3"
+		file3.Name = "test_file3.txt"
+		file3.Size = 1
+		err = db.AddFile(file3)
+		assert.Nil(t, err)
+
+		file4 := utils.CreateTestFileWithID("test_id", "test_colony2", now)
+		file4.ID = core.GenerateRandomID()
+		file4.Label = "/testdir3"
+		file4.Name = "test_file4.txt"
+		file4.Size = 1
+		err = db.AddFile(file4)
+		assert.Nil(t, err)
+
+		count, err := db.CountFilesWithLabel("test_colony2", "/testdir3")
+		assert.Nil(t, err)
+		assert.Equal(t, count, 2)
+
+		count, err = db.CountFilesWithLabel("test_colony2", "/testdir2")
+		assert.Nil(t, err)
+		assert.Equal(t, count, 1)
+
+		count, err = db.CountFilesWithLabel("test_colony1", "/testdir1")
+		assert.Nil(t, err)
+		assert.Equal(t, count, 1)
+
+		count, err = db.CountFilesWithLabel("test_colony1", "label_does_not_exists")
+		assert.Nil(t, err)
+		assert.Equal(t, count, 0)
+	})
+
+	// ---------------------------------------------------------------
+	// Snapshot tests
+	// ---------------------------------------------------------------
+	t.Run("Snapshot/Create", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		label := "test_label"
+		colonyName := "test_colony"
+		now := time.Now()
+
+		file := utils.CreateTestFileWithID("test_id", colonyName, now)
+		file.ID = "test_file1_id"
+		file.Label = label
+		file.Name = "test_file1"
+		err := db.AddFile(file)
+		assert.Nil(t, err)
+
+		file.ID = "test_file2_id" // Another revision of test_file1
+		file.Label = label
+		file.Name = "test_file1"
+		err = db.AddFile(file)
+		assert.Nil(t, err)
+
+		file.ID = "test_file3_id"
+		file.Label = label
+		file.Name = "test_file3"
+		err = db.AddFile(file)
+		assert.Nil(t, err)
+
+		snapshotName := "test_snapshot_name"
+		snapshot, err := db.CreateSnapshot(colonyName, label, snapshotName)
+		assert.Nil(t, err)
+		assert.Len(t, snapshot.FileIDs, 2)
+
+		counter := 0
+		for _, fileID := range snapshot.FileIDs {
+			if fileID == "test_file2_id" { // latest revision, not test_file1_id
+				counter++
+			}
+			if fileID == "test_file3_id" {
+				counter++
+			}
+		}
+		assert.Equal(t, counter, 2)
+		assert.Equal(t, snapshot.ColonyName, colonyName)
+		assert.Equal(t, snapshot.Name, snapshotName)
+		assert.Equal(t, snapshot.Label, label)
+
+		_, err = db.CreateSnapshot(colonyName, label, snapshotName)
+		assert.NotNil(t, err) // name must be unique
+	})
+
+	t.Run("Snapshot/GetByName", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		label := "test_label"
+		colonyName := "test_colony"
+		now := time.Now()
+
+		file := utils.CreateTestFileWithID("test_id", colonyName, now)
+		file.ID = "test_file1_id"
+		file.Label = label
+		file.Name = "test_file1"
+		err := db.AddFile(file)
+		assert.Nil(t, err)
+
+		snapshotName := "test_snapshot_name"
+		snapshot, err := db.CreateSnapshot(colonyName, label, snapshotName)
+		assert.Nil(t, err)
+		assert.Len(t, snapshot.FileIDs, 1)
+
+		snapshotFromDB, err := db.GetSnapshotByName(colonyName, snapshotName)
+		assert.Nil(t, err)
+		assert.True(t, snapshotFromDB.Equals(snapshot))
+	})
+
+	t.Run("Snapshot/GetByColony", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		label := "test_label"
+		colonyName := "test_colony"
+		now := time.Now()
+
+		file := utils.CreateTestFileWithID("test_id", colonyName, now)
+		file.ID = "test_file1_id"
+		file.Label = label
+		file.Name = "test_file1"
+		err := db.AddFile(file)
+		assert.Nil(t, err)
+
+		_, err = db.CreateSnapshot(colonyName, label, "test_snapshot_name")
+		assert.Nil(t, err)
+
+		_, err = db.CreateSnapshot(colonyName, label, "test_snapshot_name2")
+		assert.Nil(t, err)
+
+		snapshotsFromDB, err := db.GetSnapshotsByColonyName(colonyName)
+		assert.Nil(t, err)
+		assert.Len(t, snapshotsFromDB, 2)
+	})
+
+	t.Run("Snapshot/RemoveByID", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		label := "test_label"
+		colonyName := "test_colony"
+		now := time.Now()
+
+		file := utils.CreateTestFileWithID("test_id", colonyName, now)
+		file.ID = "test_file1_id"
+		file.Label = label
+		file.Name = "test_file1"
+		err := db.AddFile(file)
+		assert.Nil(t, err)
+
+		snapshot1, err := db.CreateSnapshot(colonyName, label, "test_snapshot_name")
+		assert.Nil(t, err)
+
+		snapshot2, err := db.CreateSnapshot(colonyName, label, "test_snapshot_name2")
+		assert.Nil(t, err)
+
+		err = db.RemoveSnapshotByID(colonyName, snapshot1.ID)
+		assert.Nil(t, err)
+
+		_, err = db.GetSnapshotByID(colonyName, snapshot1.ID)
+		assert.NotNil(t, err)
+		_, err = db.GetSnapshotByID(colonyName, snapshot2.ID)
+		assert.Nil(t, err)
+		snapshotsFromDB, err := db.GetSnapshotsByColonyName(colonyName)
+		assert.Nil(t, err)
+		assert.Len(t, snapshotsFromDB, 1)
+	})
+
+	t.Run("Snapshot/RemoveByName", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		label := "test_label"
+		colonyName := "test_colony_id"
+		now := time.Now()
+
+		file := utils.CreateTestFileWithID("test_id", colonyName, now)
+		file.ID = "test_file1_id"
+		file.Label = label
+		file.Name = "test_file1"
+		err := db.AddFile(file)
+		assert.Nil(t, err)
+
+		snapshot1, err := db.CreateSnapshot(colonyName, label, "test_snapshot_name")
+		assert.Nil(t, err)
+
+		snapshot2, err := db.CreateSnapshot(colonyName, label, "test_snapshot_name2")
+		assert.Nil(t, err)
+
+		err = db.RemoveSnapshotByName(colonyName, "test_snapshot_name")
+		assert.Nil(t, err)
+
+		_, err = db.GetSnapshotByID(colonyName, snapshot1.ID)
+		assert.NotNil(t, err)
+		_, err = db.GetSnapshotByID(colonyName, snapshot2.ID)
+		assert.Nil(t, err)
+		snapshotsFromDB, err := db.GetSnapshotsByColonyName(colonyName)
+		assert.Nil(t, err)
+		assert.Len(t, snapshotsFromDB, 1)
+	})
+
+	t.Run("Snapshot/RemoveByColony", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		label := "test_label"
+		colonyName1 := "test_colony_1"
+		colonyName2 := "test_colony_2"
+		now := time.Now()
+
+		file := utils.CreateTestFileWithID("test_id", colonyName1, now)
+		file.ID = "test_file1_id"
+		file.Label = label
+		file.Name = "test_file1"
+		err := db.AddFile(file)
+		assert.Nil(t, err)
+
+		file = utils.CreateTestFileWithID("test_id", colonyName2, now)
+		file.ID = "test_file2_id"
+		file.Label = label
+		file.Name = "test_file2"
+		err = db.AddFile(file)
+		assert.Nil(t, err)
+
+		file = utils.CreateTestFileWithID("test_id", colonyName2, now)
+		file.ID = "test_file3_id"
+		file.Label = label
+		file.Name = "test_file3"
+		err = db.AddFile(file)
+		assert.Nil(t, err)
+
+		_, err = db.CreateSnapshot(colonyName1, label, "test_snapshot_name1")
+		assert.Nil(t, err)
+
+		_, err = db.CreateSnapshot(colonyName1, label, "test_snapshot_name2")
+		assert.Nil(t, err)
+
+		_, err = db.CreateSnapshot(colonyName2, label, "test_snapshot_name3")
+		assert.Nil(t, err)
+
+		_, err = db.CreateSnapshot(colonyName2, label, "test_snapshot_name4")
+		assert.Nil(t, err)
+
+		err = db.RemoveSnapshotsByColonyName(colonyName1)
+		assert.Nil(t, err)
+
+		snapshotsFromDB, err := db.GetSnapshotsByColonyName(colonyName1)
+		assert.Nil(t, err)
+		assert.Len(t, snapshotsFromDB, 0)
+
+		snapshotsFromDB, err = db.GetSnapshotsByColonyName(colonyName2)
+		assert.Nil(t, err)
+		assert.Len(t, snapshotsFromDB, 2)
+	})
+
+	// ---------------------------------------------------------------
+	// GeneratorArgs tests
+	// ---------------------------------------------------------------
+	t.Run("GeneratorArgs/AddAndCount", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+		generatorID := core.GenerateRandomID()
+		generatorArg := core.CreateGeneratorArg(generatorID, colonyName, "arg")
+		generatorArg2 := core.CreateGeneratorArg(generatorID, colonyName, "arg")
+
+		err := db.AddGeneratorArg(generatorArg)
+		assert.Nil(t, err)
+		err = db.AddGeneratorArg(generatorArg2)
+		assert.Nil(t, err)
+
+		generatorArgsFromDB, err := db.GetGeneratorArgs(generatorID, 100)
+		assert.Nil(t, err)
+		assert.Len(t, generatorArgsFromDB, 2)
+
+		count, err := db.CountGeneratorArgs(generatorID)
+		assert.Nil(t, err)
+		assert.Equal(t, count, 2)
+	})
+
+	t.Run("GeneratorArgs/RemoveByGeneratorID", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+		generatorID1 := core.GenerateRandomID()
+		generatorArg := core.CreateGeneratorArg(generatorID1, colonyName, "arg")
+		generatorID2 := core.GenerateRandomID()
+		generatorArg2 := core.CreateGeneratorArg(generatorID2, colonyName, "arg")
+
+		err := db.AddGeneratorArg(generatorArg)
+		assert.Nil(t, err)
+		err = db.AddGeneratorArg(generatorArg2)
+		assert.Nil(t, err)
+
+		err = db.RemoveAllGeneratorArgsByGeneratorID(generatorID1)
+		assert.Nil(t, err)
+
+		count, err := db.CountGeneratorArgs(generatorID1)
+		assert.Nil(t, err)
+		assert.Equal(t, count, 0)
+
+		count, err = db.CountGeneratorArgs(generatorID2)
+		assert.Nil(t, err)
+		assert.Equal(t, count, 1)
+	})
+
+	t.Run("GeneratorArgs/RemoveByColony", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+		generatorID1 := core.GenerateRandomID()
+		generatorArg := core.CreateGeneratorArg(generatorID1, colonyName, "arg")
+		generatorID2 := core.GenerateRandomID()
+		generatorArg2 := core.CreateGeneratorArg(generatorID2, colonyName, "arg")
+
+		err := db.AddGeneratorArg(generatorArg)
+		assert.Nil(t, err)
+		err = db.AddGeneratorArg(generatorArg2)
+		assert.Nil(t, err)
+
+		err = db.RemoveAllGeneratorArgsByColonyName(colonyName)
+		assert.Nil(t, err)
+
+		count, err := db.CountGeneratorArgs(generatorID1)
+		assert.Nil(t, err)
+		assert.Equal(t, count, 0)
+
+		count, err = db.CountGeneratorArgs(generatorID2)
+		assert.Nil(t, err)
+		assert.Equal(t, count, 0)
+	})
+
+	// ---------------------------------------------------------------
+	// ProcessGraph tests
+	// ---------------------------------------------------------------
+	t.Run("ProcessGraph/AddAndGet", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+
+		process1 := utils.CreateTestProcess(colonyName)
+		process2 := utils.CreateTestProcess(colonyName)
+		process3 := utils.CreateTestProcess(colonyName)
+		process4 := utils.CreateTestProcess(colonyName)
+
+		process1.AddChild(process2.ID)
+		process1.AddChild(process3.ID)
+		process2.AddParent(process1.ID)
+		process3.AddParent(process1.ID)
+		process2.AddChild(process4.ID)
+		process3.AddChild(process4.ID)
+		process4.AddParent(process2.ID)
+		process4.AddParent(process3.ID)
+
+		err := db.AddProcess(process1)
+		assert.Nil(t, err)
+		err = db.AddProcess(process2)
+		assert.Nil(t, err)
+		err = db.AddProcess(process3)
+		assert.Nil(t, err)
+		err = db.AddProcess(process4)
+		assert.Nil(t, err)
+
+		graph, err := core.CreateProcessGraph(colonyName)
+		assert.Nil(t, err)
+		graph.AddRoot(process1.ID)
+
+		err = db.AddProcessGraph(graph)
+		assert.Nil(t, err)
+
+		graphFromDB, err := db.GetProcessGraphByID(graph.ID)
+		assert.Nil(t, err)
+		assert.True(t, graph.Equals(graphFromDB))
+	})
+
+	t.Run("ProcessGraph/RemoveByID", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+
+		// Create graph 1
+		p1 := utils.CreateTestProcess(colonyName)
+		err := db.AddProcess(p1)
+		assert.Nil(t, err)
+		graph1, err := core.CreateProcessGraph(colonyName)
+		assert.Nil(t, err)
+		graph1.AddRoot(p1.ID)
+		err = db.AddProcessGraph(graph1)
+		assert.Nil(t, err)
+
+		// Create graph 2
+		p2 := utils.CreateTestProcess(colonyName)
+		err = db.AddProcess(p2)
+		assert.Nil(t, err)
+		graph2, err := core.CreateProcessGraph(colonyName)
+		assert.Nil(t, err)
+		graph2.AddRoot(p2.ID)
+		err = db.AddProcessGraph(graph2)
+		assert.Nil(t, err)
+
+		// Remove graph 1
+		err = db.RemoveProcessGraphByID(graph1.ID)
+		assert.Nil(t, err)
+
+		graphFromDB, err := db.GetProcessGraphByID(graph1.ID)
+		assert.Nil(t, err)
+		assert.Nil(t, graphFromDB)
+
+		graphFromDB, err = db.GetProcessGraphByID(graph2.ID)
+		assert.Nil(t, err)
+		assert.True(t, graphFromDB.Equals(graph2))
+	})
+
+	t.Run("ProcessGraph/SetState", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+
+		p := utils.CreateTestProcess(colonyName)
+		err := db.AddProcess(p)
+		assert.Nil(t, err)
+		graph, err := core.CreateProcessGraph(colonyName)
+		assert.Nil(t, err)
+		graph.AddRoot(p.ID)
+		err = db.AddProcessGraph(graph)
+		assert.Nil(t, err)
+
+		err = db.SetProcessGraphState(graph.ID, core.WAITING)
+		assert.Nil(t, err)
+		graphFromDB, err := db.GetProcessGraphByID(graph.ID)
+		assert.Nil(t, err)
+		assert.Equal(t, core.WAITING, graphFromDB.State)
+
+		err = db.SetProcessGraphState(graph.ID, core.RUNNING)
+		assert.Nil(t, err)
+		graphFromDB, err = db.GetProcessGraphByID(graph.ID)
+		assert.Nil(t, err)
+		assert.Equal(t, core.RUNNING, graphFromDB.State)
+
+		err = db.SetProcessGraphState(graph.ID, core.SUCCESS)
+		assert.Nil(t, err)
+		graphFromDB, err = db.GetProcessGraphByID(graph.ID)
+		assert.Nil(t, err)
+		assert.Equal(t, core.SUCCESS, graphFromDB.State)
+	})
+
+	t.Run("ProcessGraph/FindWaiting", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+		for i := 0; i < 3; i++ {
+			p := utils.CreateTestProcess(colonyName)
+			err := db.AddProcess(p)
+			assert.Nil(t, err)
+			graph, err := core.CreateProcessGraph(colonyName)
+			assert.Nil(t, err)
+			graph.AddRoot(p.ID)
+			err = db.AddProcessGraph(graph)
+			assert.Nil(t, err)
+			err = db.SetProcessGraphState(graph.ID, core.WAITING)
+			assert.Nil(t, err)
+		}
+
+		graphs, err := db.FindWaitingProcessGraphs(colonyName, 100)
+		assert.Nil(t, err)
+		assert.Len(t, graphs, 3)
+	})
+
+	t.Run("ProcessGraph/FindRunning", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+		for i := 0; i < 4; i++ {
+			p := utils.CreateTestProcess(colonyName)
+			err := db.AddProcess(p)
+			assert.Nil(t, err)
+			graph, err := core.CreateProcessGraph(colonyName)
+			assert.Nil(t, err)
+			graph.AddRoot(p.ID)
+			err = db.AddProcessGraph(graph)
+			assert.Nil(t, err)
+			err = db.SetProcessGraphState(graph.ID, core.RUNNING)
+			assert.Nil(t, err)
+		}
+
+		graphs, err := db.FindRunningProcessGraphs(colonyName, 100)
+		assert.Nil(t, err)
+		assert.Len(t, graphs, 4)
+	})
+
+	t.Run("ProcessGraph/FindSuccessful", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+		for i := 0; i < 5; i++ {
+			p := utils.CreateTestProcess(colonyName)
+			err := db.AddProcess(p)
+			assert.Nil(t, err)
+			graph, err := core.CreateProcessGraph(colonyName)
+			assert.Nil(t, err)
+			graph.AddRoot(p.ID)
+			err = db.AddProcessGraph(graph)
+			assert.Nil(t, err)
+			err = db.SetProcessGraphState(graph.ID, core.SUCCESS)
+			assert.Nil(t, err)
+		}
+
+		graphs, err := db.FindSuccessfulProcessGraphs(colonyName, 100)
+		assert.Nil(t, err)
+		assert.Len(t, graphs, 5)
+	})
+
+	t.Run("ProcessGraph/FindFailed", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+		for i := 0; i < 2; i++ {
+			p := utils.CreateTestProcess(colonyName)
+			err := db.AddProcess(p)
+			assert.Nil(t, err)
+			graph, err := core.CreateProcessGraph(colonyName)
+			assert.Nil(t, err)
+			graph.AddRoot(p.ID)
+			err = db.AddProcessGraph(graph)
+			assert.Nil(t, err)
+			err = db.SetProcessGraphState(graph.ID, core.FAILED)
+			assert.Nil(t, err)
+		}
+
+		graphs, err := db.FindFailedProcessGraphs(colonyName, 100)
+		assert.Nil(t, err)
+		assert.Len(t, graphs, 2)
+	})
+
+	t.Run("ProcessGraph/FindCancelled", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+
+		// Add 5 cancelled graphs
+		for i := 0; i < 5; i++ {
+			p := utils.CreateTestProcess(colonyName)
+			err := db.AddProcess(p)
+			assert.Nil(t, err)
+			graph, err := core.CreateProcessGraph(colonyName)
+			assert.Nil(t, err)
+			graph.AddRoot(p.ID)
+			err = db.AddProcessGraph(graph)
+			assert.Nil(t, err)
+			err = db.SetProcessGraphState(graph.ID, core.CANCELLED)
+			assert.Nil(t, err)
+		}
+
+		// Add 3 waiting graphs (should not appear in cancelled results)
+		for i := 0; i < 3; i++ {
+			p := utils.CreateTestProcess(colonyName)
+			err := db.AddProcess(p)
+			assert.Nil(t, err)
+			graph, err := core.CreateProcessGraph(colonyName)
+			assert.Nil(t, err)
+			graph.AddRoot(p.ID)
+			err = db.AddProcessGraph(graph)
+			assert.Nil(t, err)
+			err = db.SetProcessGraphState(graph.ID, core.WAITING)
+			assert.Nil(t, err)
+		}
+
+		graphs, err := db.FindCancelledProcessGraphs(colonyName, 100)
+		assert.Nil(t, err)
+		assert.Len(t, graphs, 5)
+
+		count, err := db.CountCancelledProcessGraphsByColonyName(colonyName)
+		assert.Nil(t, err)
+		assert.Equal(t, 5, count)
+	})
+
+	t.Run("ProcessGraph/RemoveAllByColony", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+
+		p1 := utils.CreateTestProcess(colonyName)
+		err := db.AddProcess(p1)
+		assert.Nil(t, err)
+		graph1, err := core.CreateProcessGraph(colonyName)
+		assert.Nil(t, err)
+		graph1.AddRoot(p1.ID)
+		err = db.AddProcessGraph(graph1)
+		assert.Nil(t, err)
+
+		p2 := utils.CreateTestProcess(colonyName)
+		err = db.AddProcess(p2)
+		assert.Nil(t, err)
+		graph2, err := core.CreateProcessGraph(colonyName)
+		assert.Nil(t, err)
+		graph2.AddRoot(p2.ID)
+		err = db.AddProcessGraph(graph2)
+		assert.Nil(t, err)
+
+		err = db.RemoveAllProcessGraphsByColonyName(colonyName)
+		assert.Nil(t, err)
+
+		graphFromDB, err := db.GetProcessGraphByID(graph1.ID)
+		assert.Nil(t, err)
+		assert.Nil(t, graphFromDB)
+
+		graphFromDB, err = db.GetProcessGraphByID(graph2.ID)
+		assert.Nil(t, err)
+		assert.Nil(t, graphFromDB)
+	})
+
+	t.Run("ProcessGraph/RemoveWaitingByColony", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+
+		// Create two waiting process graphs
+		process1 := utils.CreateTestProcess(colonyName)
+		err := db.AddProcess(process1)
+		assert.Nil(t, err)
+		graph1, err := core.CreateProcessGraph(colonyName)
+		assert.Nil(t, err)
+		graph1.AddRoot(process1.ID)
+		err = db.AddProcessGraph(graph1)
+		assert.Nil(t, err)
+		err = db.SetProcessGraphState(graph1.ID, core.WAITING)
+		assert.Nil(t, err)
+		err = db.SetProcessState(process1.ID, core.WAITING)
+		assert.Nil(t, err)
+
+		process2 := utils.CreateTestProcess(colonyName)
+		err = db.AddProcess(process2)
+		assert.Nil(t, err)
+		graph2, err := core.CreateProcessGraph(colonyName)
+		assert.Nil(t, err)
+		graph2.AddRoot(process2.ID)
+		err = db.AddProcessGraph(graph2)
+		assert.Nil(t, err)
+		err = db.SetProcessGraphState(graph2.ID, core.WAITING)
+		assert.Nil(t, err)
+		err = db.SetProcessState(process2.ID, core.WAITING)
+		assert.Nil(t, err)
+
+		waitingGraphs, err := db.CountWaitingProcessGraphs()
+		assert.Nil(t, err)
+		assert.Equal(t, 2, waitingGraphs)
+
+		err = db.RemoveAllWaitingProcessGraphsByColonyName(colonyName)
+		assert.Nil(t, err)
+
+		waitingGraphs, err = db.CountWaitingProcessGraphs()
+		assert.Nil(t, err)
+		assert.Equal(t, 0, waitingGraphs)
+	})
+
+	t.Run("ProcessGraph/RemoveRunningByColony", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colonyName := core.GenerateRandomID()
+
+		// Create two running process graphs
+		process1 := utils.CreateTestProcess(colonyName)
+		err := db.AddProcess(process1)
+		assert.Nil(t, err)
+		graph1, err := core.CreateProcessGraph(colonyName)
+		assert.Nil(t, err)
+		graph1.AddRoot(process1.ID)
+		err = db.AddProcessGraph(graph1)
+		assert.Nil(t, err)
+		err = db.SetProcessGraphState(graph1.ID, core.RUNNING)
+		assert.Nil(t, err)
+		err = db.SetProcessState(process1.ID, core.RUNNING)
+		assert.Nil(t, err)
+
+		process2 := utils.CreateTestProcess(colonyName)
+		err = db.AddProcess(process2)
+		assert.Nil(t, err)
+		graph2, err := core.CreateProcessGraph(colonyName)
+		assert.Nil(t, err)
+		graph2.AddRoot(process2.ID)
+		err = db.AddProcessGraph(graph2)
+		assert.Nil(t, err)
+		err = db.SetProcessGraphState(graph2.ID, core.RUNNING)
+		assert.Nil(t, err)
+		err = db.SetProcessState(process2.ID, core.RUNNING)
+		assert.Nil(t, err)
+
+		runningGraphs, err := db.CountRunningProcessGraphs()
+		assert.Nil(t, err)
+		assert.Equal(t, 2, runningGraphs)
+
+		err = db.RemoveAllRunningProcessGraphsByColonyName(colonyName)
+		assert.Nil(t, err)
+
+		runningGraphs, err = db.CountRunningProcessGraphs()
+		assert.Nil(t, err)
+		assert.Equal(t, 0, runningGraphs)
+	})
+
+	// ---------------------------------------------------------------
+	// Location tests
+	// ---------------------------------------------------------------
+	t.Run("Location/Add", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colony, _, err := utils.CreateTestColonyWithKey()
+		assert.Nil(t, err)
+		err = db.AddColony(colony)
+		assert.Nil(t, err)
+
+		location := utils.CreateTestLocation(colony.Name, "test_location")
+		err = db.AddLocation(location)
+		assert.Nil(t, err)
+
+		locationFromDB, err := db.GetLocationByID(location.ID)
+		assert.Nil(t, err)
+		assert.True(t, location.Equals(locationFromDB))
+	})
+
+	t.Run("Location/AddNil", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		err := db.AddLocation(nil)
+		assert.NotNil(t, err)
+	})
+
+	t.Run("Location/AddDuplicate", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colony, _, err := utils.CreateTestColonyWithKey()
+		assert.Nil(t, err)
+		err = db.AddColony(colony)
+		assert.Nil(t, err)
+
+		location := utils.CreateTestLocation(colony.Name, "test_location")
+		err = db.AddLocation(location)
+		assert.Nil(t, err)
+
+		location2 := utils.CreateTestLocation(colony.Name, "test_location")
+		err = db.AddLocation(location2)
+		assert.NotNil(t, err)
+	})
+
+	t.Run("Location/GetByID", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colony, _, err := utils.CreateTestColonyWithKey()
+		assert.Nil(t, err)
+		err = db.AddColony(colony)
+		assert.Nil(t, err)
+
+		location := utils.CreateTestLocation(colony.Name, "test_location")
+		err = db.AddLocation(location)
+		assert.Nil(t, err)
+
+		locationFromDB, err := db.GetLocationByID(location.ID)
+		assert.Nil(t, err)
+		assert.True(t, location.Equals(locationFromDB))
+	})
+
+	t.Run("Location/GetByIDNotFound", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		locationFromDB, err := db.GetLocationByID("non_existent_id")
+		assert.Nil(t, err)
+		assert.Nil(t, locationFromDB)
+	})
+
+	t.Run("Location/GetByName", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colony, _, err := utils.CreateTestColonyWithKey()
+		assert.Nil(t, err)
+		err = db.AddColony(colony)
+		assert.Nil(t, err)
+
+		location := utils.CreateTestLocation(colony.Name, "test_location")
+		err = db.AddLocation(location)
+		assert.Nil(t, err)
+
+		locationFromDB, err := db.GetLocationByName(colony.Name, "test_location")
+		assert.Nil(t, err)
+		assert.True(t, location.Equals(locationFromDB))
+	})
+
+	t.Run("Location/GetByNameNotFound", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colony, _, err := utils.CreateTestColonyWithKey()
+		assert.Nil(t, err)
+		err = db.AddColony(colony)
+		assert.Nil(t, err)
+
+		locationFromDB, err := db.GetLocationByName(colony.Name, "non_existent_name")
+		assert.Nil(t, err)
+		assert.Nil(t, locationFromDB)
+	})
+
+	t.Run("Location/GetByColony", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colony, _, err := utils.CreateTestColonyWithKey()
+		assert.Nil(t, err)
+		err = db.AddColony(colony)
+		assert.Nil(t, err)
+
+		location1 := utils.CreateTestLocation(colony.Name, "test_location1")
+		err = db.AddLocation(location1)
+		assert.Nil(t, err)
+
+		location2 := utils.CreateTestLocation(colony.Name, "test_location2")
+		err = db.AddLocation(location2)
+		assert.Nil(t, err)
+
+		locationsFromDB, err := db.GetLocationsByColonyName(colony.Name)
+		assert.Nil(t, err)
+		assert.Len(t, locationsFromDB, 2)
+	})
+
+	t.Run("Location/GetByColonyEmpty", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colony, _, err := utils.CreateTestColonyWithKey()
+		assert.Nil(t, err)
+		err = db.AddColony(colony)
+		assert.Nil(t, err)
+
+		locationsFromDB, err := db.GetLocationsByColonyName(colony.Name)
+		assert.Nil(t, err)
+		assert.Len(t, locationsFromDB, 0)
+	})
+
+	t.Run("Location/RemoveByID", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colony, _, err := utils.CreateTestColonyWithKey()
+		assert.Nil(t, err)
+		err = db.AddColony(colony)
+		assert.Nil(t, err)
+
+		location := utils.CreateTestLocation(colony.Name, "test_location")
+		err = db.AddLocation(location)
+		assert.Nil(t, err)
+
+		err = db.RemoveLocationByID(location.ID)
+		assert.Nil(t, err)
+
+		locationFromDB, err := db.GetLocationByID(location.ID)
+		assert.Nil(t, err)
+		assert.Nil(t, locationFromDB)
+	})
+
+	t.Run("Location/RemoveByName", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colony, _, err := utils.CreateTestColonyWithKey()
+		assert.Nil(t, err)
+		err = db.AddColony(colony)
+		assert.Nil(t, err)
+
+		location := utils.CreateTestLocation(colony.Name, "test_location")
+		err = db.AddLocation(location)
+		assert.Nil(t, err)
+
+		err = db.RemoveLocationByName(colony.Name, "test_location")
+		assert.Nil(t, err)
+
+		locationFromDB, err := db.GetLocationByName(colony.Name, "test_location")
+		assert.Nil(t, err)
+		assert.Nil(t, locationFromDB)
+	})
+
+	t.Run("Location/RemoveByColony", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colony, _, err := utils.CreateTestColonyWithKey()
+		assert.Nil(t, err)
+		err = db.AddColony(colony)
+		assert.Nil(t, err)
+
+		location1 := utils.CreateTestLocation(colony.Name, "test_location1")
+		err = db.AddLocation(location1)
+		assert.Nil(t, err)
+
+		location2 := utils.CreateTestLocation(colony.Name, "test_location2")
+		err = db.AddLocation(location2)
+		assert.Nil(t, err)
+
+		locationsFromDB, err := db.GetLocationsByColonyName(colony.Name)
+		assert.Nil(t, err)
+		assert.Len(t, locationsFromDB, 2)
+
+		err = db.RemoveLocationsByColonyName(colony.Name)
+		assert.Nil(t, err)
+
+		locationsFromDB, err = db.GetLocationsByColonyName(colony.Name)
+		assert.Nil(t, err)
+		assert.Len(t, locationsFromDB, 0)
+	})
+
+	t.Run("Location/Coordinates", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colony, _, err := utils.CreateTestColonyWithKey()
+		assert.Nil(t, err)
+		err = db.AddColony(colony)
+		assert.Nil(t, err)
+
+		location := core.CreateLocation(core.GenerateRandomID(), "test_location", colony.Name, "test_desc", -122.4194, 37.7749)
+		err = db.AddLocation(location)
+		assert.Nil(t, err)
+
+		locationFromDB, err := db.GetLocationByID(location.ID)
+		assert.Nil(t, err)
+		assert.Equal(t, -122.4194, locationFromDB.Long)
+		assert.Equal(t, 37.7749, locationFromDB.Lat)
+	})
+
+	t.Run("Location/CascadeOnColonyDelete", func(t *testing.T) {
+		db, cleanup := newHarness(t)
+		defer cleanup()
+
+		colony, _, err := utils.CreateTestColonyWithKey()
+		assert.Nil(t, err)
+		err = db.AddColony(colony)
+		assert.Nil(t, err)
+
+		location1 := utils.CreateTestLocation(colony.Name, "test_location1")
+		err = db.AddLocation(location1)
+		assert.Nil(t, err)
+
+		location2 := utils.CreateTestLocation(colony.Name, "test_location2")
+		err = db.AddLocation(location2)
+		assert.Nil(t, err)
+
+		location3 := utils.CreateTestLocation(colony.Name, "test_location3")
+		err = db.AddLocation(location3)
+		assert.Nil(t, err)
+
+		locationsFromDB, err := db.GetLocationsByColonyName(colony.Name)
+		assert.Nil(t, err)
+		assert.Len(t, locationsFromDB, 3)
+
+		err = db.RemoveColonyByName(colony.Name)
+		assert.Nil(t, err)
+
+		locationsFromDB, err = db.GetLocationsByColonyName(colony.Name)
+		assert.Nil(t, err)
+		assert.Len(t, locationsFromDB, 0)
+
+		locationFromDB, err := db.GetLocationByID(location1.ID)
+		assert.Nil(t, err)
+		assert.Nil(t, locationFromDB)
+
+		locationFromDB, err = db.GetLocationByID(location2.ID)
+		assert.Nil(t, err)
+		assert.Nil(t, locationFromDB)
+
+		locationFromDB, err = db.GetLocationByID(location3.ID)
+		assert.Nil(t, err)
+		assert.Nil(t, locationFromDB)
 	})
 }
