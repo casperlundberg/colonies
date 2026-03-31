@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/colonyos/colonies/pkg/fs"
 )
 
 const bufferSize = 32 * 1024
@@ -373,12 +374,12 @@ func (s *LocalObjectStore) Exists(colonyName, objectName string) bool {
 	return err == nil
 }
 
-func (s *LocalObjectStore) Stat(colonyName, objectName string) (ObjectInfo, error) {
+func (s *LocalObjectStore) Stat(colonyName, objectName string) (fs.ObjectInfo, error) {
 	if err := s.validateName(colonyName); err != nil {
-		return ObjectInfo{}, fmt.Errorf("invalid colony name: %w", err)
+		return fs.ObjectInfo{}, fmt.Errorf("invalid colony name: %w", err)
 	}
 	if err := s.validateName(objectName); err != nil {
-		return ObjectInfo{}, fmt.Errorf("invalid object name: %w", err)
+		return fs.ObjectInfo{}, fmt.Errorf("invalid object name: %w", err)
 	}
 
 	path := s.objectPath(colonyName, objectName)
@@ -388,9 +389,9 @@ func (s *LocalObjectStore) Stat(colonyName, objectName string) (ObjectInfo, erro
 
 	info, err := os.Stat(path)
 	if err != nil {
-		return ObjectInfo{}, fmt.Errorf("failed to stat object: %w", err)
+		return fs.ObjectInfo{}, fmt.Errorf("failed to stat object: %w", err)
 	}
-	return ObjectInfo{Size: info.Size()}, nil
+	return fs.ObjectInfo{Size: info.Size()}, nil
 }
 
 func (s *LocalObjectStore) List(colonyName string) ([]string, error) {

@@ -14,7 +14,7 @@ import (
 	"github.com/colonyos/colonies/pkg/cluster"
 	"github.com/colonyos/colonies/pkg/core"
 	"github.com/colonyos/colonies/pkg/database"
-	localfs "github.com/colonyos/colonies/plugin/localfs"
+	"github.com/colonyos/colonies/pkg/fs"
 	"github.com/colonyos/colonies/pkg/rpc"
 	"github.com/colonyos/colonies/pkg/security"
 	"github.com/colonyos/colonies/pkg/security/crypto"
@@ -105,7 +105,7 @@ type Server struct {
 	channelRouter          *channel.Router
 
 	// ColonyFS file storage
-	objectStore     localfs.ObjectStore
+	objectStore     fs.ObjectStore
 	dataHandlers    *filehandlers.DataHandlers
 	fileStorageType string
 }
@@ -213,14 +213,16 @@ func createServerInternal(db database.Database,
 
 	// Initialize ColonyFS object store if configured
 	server.fileStorageType = fileStorageType
-	if fileStorageType == "coloniesfs" && fileStorageDir != "" {
-		store, err := localfs.NewLocalObjectStore(fileStorageDir)
+	if fileStorageType != "" && fileStorageDir != "" {
+		store, err := fs.CreateObjectStore(fileStorageType, fs.ObjectStoreConfig{
+			Dir: fileStorageDir,
+		})
 		if err != nil {
-			log.WithFields(log.Fields{"Error": err}).Fatal("Failed to create local object store")
+			log.WithFields(log.Fields{"Error": err, "Type": fileStorageType}).Fatal("Failed to create object store")
 		}
 		server.objectStore = store
 		server.dataHandlers = filehandlers.NewDataHandlers(server.serverAdapter, store)
-		log.WithFields(log.Fields{"StorageDir": fileStorageDir}).Info("ColonyFS file storage enabled")
+		log.WithFields(log.Fields{"StorageDir": fileStorageDir, "Type": fileStorageType}).Info("File storage enabled")
 	}
 
 	// Create backend-specific realtime handler
