@@ -71,7 +71,7 @@ Create a `main.go` that imports only the plugins you need:
 package main
 
 import (
-    "github.com/colonyos/colonies/internal/cli"
+    "github.com/colonyos/colonies/pkg/app"
     "github.com/colonyos/colonies/pkg/build"
 
     _ "github.com/colonyos/colonies/plugin/embedded"
@@ -82,7 +82,7 @@ import (
 
 func main() {
     build.BuildVersion = "custom"
-    cli.Execute()
+    app.Execute()
 }
 ```
 

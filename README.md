@@ -164,7 +164,7 @@ Users can build custom server binaries by creating a `main.go` that imports the 
 package main
 
 import (
-    "github.com/colonyos/colonies/internal/cli"
+    "github.com/colonyos/colonies/pkg/app"
     "github.com/colonyos/colonies/pkg/build"
 
     _ "github.com/colonyos/colonies/plugin/embedded"
@@ -174,7 +174,7 @@ import (
 
 func main() {
     build.BuildVersion = "custom"
-    cli.Execute()
+    app.Execute()
 }
 ```
 

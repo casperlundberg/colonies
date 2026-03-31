@@ -11,7 +11,7 @@ import (
 	_ "github.com/colonyos/colonies/plugin/localfs"
 	_ "github.com/colonyos/colonies/plugin/postgresql"
 	_ "github.com/colonyos/colonies/plugin/prometheus"
-	_ "github.com/colonyos/colonies/plugin/s3"
+	_ "github.com/colonyos/colonies/plugin/s3/objectstore"
 )
 
 var (
