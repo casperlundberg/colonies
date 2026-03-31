@@ -216,9 +216,9 @@ func TestColoniesControllerGetters(t *testing.T) {
 	generatorPeriod := controller.GetGeneratorPeriod()
 	assert.Equal(t, constants.GENERATOR_TRIGGER_PERIOD, generatorPeriod)
 
-	// Test GetEtcdServer
-	etcdServer := controller.GetEtcdServer()
-	assert.NotNil(t, etcdServer)
+	// Test GetCluster
+	clusterNode := controller.GetCluster()
+	assert.NotNil(t, clusterNode)
 
 	// Test GetEventHandler
 	eventHandler := controller.GetEventHandler()

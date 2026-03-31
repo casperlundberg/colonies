@@ -9,7 +9,8 @@ import (
 
 	"github.com/colonyos/colonies/pkg/cluster"
 	"github.com/colonyos/colonies/pkg/core"
-	backendGin "github.com/colonyos/colonies/pkg/backends/gin"
+	"github.com/colonyos/colonies/plugin/etcd"
+	backendGin "github.com/colonyos/colonies/plugin/gin"
 	"github.com/colonyos/colonies/pkg/utils"
 	"github.com/stretchr/testify/assert"
 )
@@ -412,9 +413,14 @@ func TestEventHandleRelayServer(t *testing.T) {
 	config.AddNode(node2)
 	config.AddNode(node3)
 
-	relayServer1 := cluster.CreateRelayServer(node1, config)
-	relayServer2 := cluster.CreateRelayServer(node2, config)
-	relayServer3 := cluster.CreateRelayServer(node3, config)
+	etcdConfig := etcd.Config{}
+	for _, n := range config.Nodes {
+		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
+	}
+
+	relayServer1 := etcd.CreateRelayServer(etcd.Node{Name: node1.Name, Host: node1.Host, EtcdClientPort: node1.EtcdClientPort, EtcdPeerPort: node1.EtcdPeerPort, RelayPort: node1.RelayPort, APIPort: node1.APIPort}, etcdConfig)
+	relayServer2 := etcd.CreateRelayServer(etcd.Node{Name: node2.Name, Host: node2.Host, EtcdClientPort: node2.EtcdClientPort, EtcdPeerPort: node2.EtcdPeerPort, RelayPort: node2.RelayPort, APIPort: node2.APIPort}, etcdConfig)
+	relayServer3 := etcd.CreateRelayServer(etcd.Node{Name: node3.Name, Host: node3.Host, EtcdClientPort: node3.EtcdClientPort, EtcdPeerPort: node3.EtcdPeerPort, RelayPort: node3.RelayPort, APIPort: node3.APIPort}, etcdConfig)
 
 	factory1 := backendGin.NewFactory()
 	handler1 := factory1.CreateTestableEventHandler(relayServer1)

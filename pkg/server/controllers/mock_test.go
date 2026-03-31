@@ -12,8 +12,10 @@ import (
 	"github.com/colonyos/colonies/pkg/constants"
 	"github.com/colonyos/colonies/pkg/core"
 	"github.com/colonyos/colonies/pkg/database"
-	"github.com/colonyos/colonies/pkg/database/embedded"
-	"github.com/colonyos/colonies/pkg/database/postgresql"
+	"github.com/colonyos/colonies/plugin/embedded"
+	"github.com/colonyos/colonies/plugin/etcd"
+	ginplugin "github.com/colonyos/colonies/plugin/gin"
+	"github.com/colonyos/colonies/plugin/postgresql"
 )
 
 // portCounter is used to allocate unique ports for each test to avoid port conflicts
@@ -33,7 +35,7 @@ func (v *ControllerMock) GetGeneratorPeriod() int {
 	return -1
 }
 
-func (v *ControllerMock) GetEtcdServer() *cluster.EtcdServer {
+func (v *ControllerMock) GetCluster() cluster.Cluster {
 	return nil
 }
 
@@ -628,8 +630,20 @@ func createFakeColoniesController() (*ColoniesController, *DatabaseMock) {
 	node := cluster.Node{Name: nodeName, Host: "localhost", EtcdClientPort: etcdClientPort, EtcdPeerPort: etcdPeerPort, RelayPort: relayPort, APIPort: constants.TESTPORT}
 	clusterConfig := cluster.Config{}
 	clusterConfig.AddNode(node)
+
+	etcdNode := etcd.Node{Name: node.Name, Host: node.Host, EtcdClientPort: node.EtcdClientPort, EtcdPeerPort: node.EtcdPeerPort, RelayPort: node.RelayPort, APIPort: node.APIPort}
+	etcdConfig := etcd.Config{}
+	for _, n := range clusterConfig.Nodes {
+		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
+	}
+	clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, dataPath)
+	clusterNode.Start()
+	clusterNode.WaitToStart()
+	relayServer := etcd.CreateRelayServer(etcdNode, etcdConfig)
+	realtimeBackend := ginplugin.NewFactory()
+
 	dbMock := &DatabaseMock{}
-	return CreateColoniesController(dbMock, node, clusterConfig, dataPath, constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, false, -1, 500, time.Duration(constants.DEFAULT_STALE_EXECUTOR_DURATION)*time.Second), dbMock
+	return CreateColoniesController(dbMock, node, clusterNode, relayServer, realtimeBackend, constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, false, -1, 500, time.Duration(constants.DEFAULT_STALE_EXECUTOR_DURATION)*time.Second), dbMock
 }
 
 func prepareTestDB(prefix string) (database.Database, error) {
@@ -655,7 +669,19 @@ func createTestColoniesController(db database.Database) *ColoniesController {
 	node := cluster.Node{Name: "test", Host: "localhost", EtcdClientPort: 24101, EtcdPeerPort: 23101, RelayPort: 25101, APIPort: constants.TESTPORT}
 	clusterConfig := cluster.Config{}
 	clusterConfig.AddNode(node)
-	return CreateColoniesController(db, node, clusterConfig, etcdDir, constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, false, -1, 500, time.Duration(constants.DEFAULT_STALE_EXECUTOR_DURATION)*time.Second)
+
+	etcdNode := etcd.Node{Name: node.Name, Host: node.Host, EtcdClientPort: node.EtcdClientPort, EtcdPeerPort: node.EtcdPeerPort, RelayPort: node.RelayPort, APIPort: node.APIPort}
+	etcdConfig := etcd.Config{}
+	for _, n := range clusterConfig.Nodes {
+		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
+	}
+	clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, etcdDir)
+	clusterNode.Start()
+	clusterNode.WaitToStart()
+	relayServer := etcd.CreateRelayServer(etcdNode, etcdConfig)
+	realtimeBackend := ginplugin.NewFactory()
+
+	return CreateColoniesController(db, node, clusterNode, relayServer, realtimeBackend, constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, false, -1, 500, time.Duration(constants.DEFAULT_STALE_EXECUTOR_DURATION)*time.Second)
 }
 
 func createTestColoniesControllerWithStaleDuration(db database.Database, staleDuration time.Duration) *ColoniesController {
@@ -663,7 +689,19 @@ func createTestColoniesControllerWithStaleDuration(db database.Database, staleDu
 	node := cluster.Node{Name: "test", Host: "localhost", EtcdClientPort: 24101, EtcdPeerPort: 23101, RelayPort: 25101, APIPort: constants.TESTPORT}
 	clusterConfig := cluster.Config{}
 	clusterConfig.AddNode(node)
-	return CreateColoniesController(db, node, clusterConfig, etcdDir, constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, false, -1, 500, staleDuration)
+
+	etcdNode := etcd.Node{Name: node.Name, Host: node.Host, EtcdClientPort: node.EtcdClientPort, EtcdPeerPort: node.EtcdPeerPort, RelayPort: node.RelayPort, APIPort: node.APIPort}
+	etcdConfig := etcd.Config{}
+	for _, n := range clusterConfig.Nodes {
+		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
+	}
+	clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, etcdDir)
+	clusterNode.Start()
+	clusterNode.WaitToStart()
+	relayServer := etcd.CreateRelayServer(etcdNode, etcdConfig)
+	realtimeBackend := ginplugin.NewFactory()
+
+	return CreateColoniesController(db, node, clusterNode, relayServer, realtimeBackend, constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, false, -1, 500, staleDuration)
 }
 
 func createTestColoniesController2(db database.Database) *ColoniesController {
@@ -671,5 +709,17 @@ func createTestColoniesController2(db database.Database) *ColoniesController {
 	node := cluster.Node{Name: "test2", Host: "localhost", EtcdClientPort: 24102, EtcdPeerPort: 23102, RelayPort: 25102, APIPort: constants.TESTPORT}
 	clusterConfig := cluster.Config{}
 	clusterConfig.AddNode(node)
-	return CreateColoniesController(db, node, clusterConfig, etcdDir, constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, false, -1, 500, time.Duration(constants.DEFAULT_STALE_EXECUTOR_DURATION)*time.Second)
+
+	etcdNode := etcd.Node{Name: node.Name, Host: node.Host, EtcdClientPort: node.EtcdClientPort, EtcdPeerPort: node.EtcdPeerPort, RelayPort: node.RelayPort, APIPort: node.APIPort}
+	etcdConfig := etcd.Config{}
+	for _, n := range clusterConfig.Nodes {
+		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
+	}
+	clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, etcdDir)
+	clusterNode.Start()
+	clusterNode.WaitToStart()
+	relayServer := etcd.CreateRelayServer(etcdNode, etcdConfig)
+	realtimeBackend := ginplugin.NewFactory()
+
+	return CreateColoniesController(db, node, clusterNode, relayServer, realtimeBackend, constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, false, -1, 500, time.Duration(constants.DEFAULT_STALE_EXECUTOR_DURATION)*time.Second)
 }

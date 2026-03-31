@@ -54,10 +54,12 @@ type ServerConfig struct {
 
 // ServerManager manages multiple server backends
 type ServerManager struct {
-	// Shared blueprints
+	// Shared resources
 	db              database.Database
 	thisNode        cluster.Node
 	clusterConfig   cluster.Config
+	clusterNode     cluster.Cluster
+	relayServer     cluster.Relay
 	etcdDataPath    string
 	generatorPeriod int
 	cronPeriod      int
@@ -85,6 +87,8 @@ type SharedResources struct {
 	DB                    database.Database
 	ThisNode              cluster.Node
 	ClusterConfig         cluster.Config
+	ClusterNode           cluster.Cluster
+	RelayServer           cluster.Relay
 	EtcdDataPath          string
 	GeneratorPeriod       int
 	CronPeriod            int
@@ -98,16 +102,20 @@ func NewServerManager(
 	db database.Database,
 	thisNode cluster.Node,
 	clusterConfig cluster.Config,
+	clusterNode cluster.Cluster,
+	relayServer cluster.Relay,
 	etcdDataPath string,
 	generatorPeriod int,
 	cronPeriod int,
 ) *ServerManager {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	return &ServerManager{
 		db:              db,
 		thisNode:        thisNode,
 		clusterConfig:   clusterConfig,
+		clusterNode:     clusterNode,
+		relayServer:     relayServer,
 		etcdDataPath:    etcdDataPath,
 		generatorPeriod: generatorPeriod,
 		cronPeriod:      cronPeriod,
@@ -179,6 +187,8 @@ func (sm *ServerManager) StartAll() error {
 		DB:                    sm.db,
 		ThisNode:              sm.thisNode,
 		ClusterConfig:         sm.clusterConfig,
+		ClusterNode:           sm.clusterNode,
+		RelayServer:           sm.relayServer,
 		EtcdDataPath:          sm.etcdDataPath,
 		GeneratorPeriod:       sm.generatorPeriod,
 		CronPeriod:            sm.cronPeriod,

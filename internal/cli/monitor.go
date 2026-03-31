@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/colonyos/colonies/pkg/monitoring"
+	monitoring "github.com/colonyos/colonies/plugin/prometheus"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )

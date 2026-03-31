@@ -53,11 +53,16 @@ ColonyOS is a distributed meta-orchestrator framework that creates compute conti
 
 ### Key Packages
 - `pkg/core/`: Core domain models (Process, Executor, Colony, FunctionSpec)
-- `pkg/service/`: HTTP RPC service implementation 
+- `pkg/server/`: HTTP server, handlers, controllers
 - `pkg/client/`: Go SDK for Colonies API
-- `pkg/database/postgresql/`: PostgreSQL database layer with TimescaleDB support
+- `pkg/database/`: Database interface and registry (implementations in `plugin/`)
+- `pkg/backends/`: HTTP backend interfaces and registry (implementations in `plugin/`)
+- `pkg/fs/`: File storage interface and registry (implementations in `plugin/`)
+- `pkg/cluster/`: Cluster interface and registry (implementations in `plugin/`)
+- `pkg/monitoring/`: Monitoring interface and registry (implementations in `plugin/`)
 - `pkg/security/`: Zero-trust security protocol implementation
 - `pkg/scheduler/`: Process scheduling and assignment logic
+- `plugin/`: Backend implementations (postgresql, embedded, gin, localfs, s3, etcd, prometheus)
 - `internal/cli/`: Command-line interface implementation using Cobra
 
 ### Architecture Patterns
@@ -65,15 +70,16 @@ ColonyOS is a distributed meta-orchestrator framework that creates compute conti
 - **Process graphs**: Workflows as DAGs with parent-child relationships
 - **Distributed scheduling**: Processes assigned to available Executors based on conditions
 - **Meta-orchestration**: Coordinates workloads across multiple platforms without direct control
+- **Plugin architecture**: Backend implementations (database, HTTP, storage, clustering, monitoring) are in `plugin/` and register via `init()`. Custom backends can be built externally.
 
 ### Database
-The system uses PostgreSQL with TimescaleDB for time-series data. Database interactions are abstracted through interfaces in `pkg/database/`.
+The system uses PostgreSQL with TimescaleDB for time-series data, with an embedded database option for development and testing. Database implementations are plugins in `plugin/postgresql/` and `plugin/embedded/`, registered via the interface and registry in `pkg/database/`.
 
 ### CLI Structure
-The main binary is built from `cmd/main.go` which delegates to `internal/cli/` for all command handling. Commands are organized by domain (process, executor, colony, etc.).
+The main binary is built from `cmd/main.go`, which imports plugins via blank imports (e.g., `_ "github.com/colonyos/colonies/plugin/postgresql"`) and delegates to `internal/cli/` for all command handling. Commands are organized by domain (process, executor, colony, etc.).
 
 ### Testing Philosophy
-Tests are co-located with source files using `_test.go` suffix. The test suite covers reliability, crypto, core domain models, database layer, RPC protocol, security, and scheduling components.
+Tests are co-located with source files using `_test.go` suffix. The test suite covers reliability, crypto, core domain models, database layer, RPC protocol, security, and scheduling components. Use `make github_test` to run tests without PostgreSQL (uses the embedded database plugin).
 
 ## Debugging Reconciliation Mechanism
 

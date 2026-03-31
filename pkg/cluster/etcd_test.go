@@ -1,30 +1,29 @@
-package cluster
+package cluster_test
 
 import (
 	"os"
 	"testing"
 
+	"github.com/colonyos/colonies/plugin/etcd"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCreateEtcdCluster(t *testing.T) {
-	node1 := Node{Name: "etcd1", Host: "localhost", EtcdClientPort: 24100, EtcdPeerPort: 23100, RelayPort: 25100, APIPort: 26100}
-	node2 := Node{Name: "etcd2", Host: "localhost", EtcdClientPort: 24200, EtcdPeerPort: 23200, RelayPort: 25200, APIPort: 26200}
-	node3 := Node{Name: "etcd3", Host: "localhost", EtcdClientPort: 24300, EtcdPeerPort: 23300, RelayPort: 25300, APIPort: 26300}
-	node4 := Node{Name: "etcd4", Host: "localhost", EtcdClientPort: 24400, EtcdPeerPort: 23400, RelayPort: 25400, APIPort: 26400}
+	node1 := etcd.Node{Name: "etcd1", Host: "localhost", EtcdClientPort: 24100, EtcdPeerPort: 23100, RelayPort: 25100, APIPort: 26100}
+	node2 := etcd.Node{Name: "etcd2", Host: "localhost", EtcdClientPort: 24200, EtcdPeerPort: 23200, RelayPort: 25200, APIPort: 26200}
+	node3 := etcd.Node{Name: "etcd3", Host: "localhost", EtcdClientPort: 24300, EtcdPeerPort: 23300, RelayPort: 25300, APIPort: 26300}
+	node4 := etcd.Node{Name: "etcd4", Host: "localhost", EtcdClientPort: 24400, EtcdPeerPort: 23400, RelayPort: 25400, APIPort: 26400}
 
-	config := Config{}
+	config := etcd.Config{}
 	config.AddNode(node1)
 	config.AddNode(node2)
 	config.AddNode(node3)
 	config.AddNode(node4)
 
-	server1 := CreateEtcdServer(node1, config, ".")
-	server2 := CreateEtcdServer(node2, config, ".")
-	server3 := CreateEtcdServer(node3, config, ".")
-	server4 := CreateEtcdServer(node4, config, ".")
-
-	assert.Equal(t, server1.buildInitialClusterStr(), "etcd1=http://localhost:23100,etcd2=http://localhost:23200,etcd3=http://localhost:23300,etcd4=http://localhost:23400")
+	server1 := etcd.CreateEtcdServer(node1, config, ".")
+	server2 := etcd.CreateEtcdServer(node2, config, ".")
+	server3 := etcd.CreateEtcdServer(node3, config, ".")
+	server4 := etcd.CreateEtcdServer(node4, config, ".")
 
 	server1.Start()
 	server2.Start()
@@ -70,11 +69,11 @@ func TestCreateEtcdCluster(t *testing.T) {
 }
 
 func TestEtcdAssignmentsPauseResume(t *testing.T) {
-	node := Node{Name: "etcd1", Host: "localhost", EtcdClientPort: 24500, EtcdPeerPort: 23500, RelayPort: 25500, APIPort: 26500}
-	config := Config{}
+	node := etcd.Node{Name: "etcd1", Host: "localhost", EtcdClientPort: 24500, EtcdPeerPort: 23500, RelayPort: 25500, APIPort: 26500}
+	config := etcd.Config{}
 	config.AddNode(node)
 
-	server := CreateEtcdServer(node, config, ".")
+	server := etcd.CreateEtcdServer(node, config, ".")
 	server.Start()
 	server.WaitToStart()
 
@@ -123,11 +122,11 @@ func TestEtcdAssignmentsPauseResume(t *testing.T) {
 }
 
 func TestEtcdAssignmentsPauseResumeWithoutClient(t *testing.T) {
-	node := Node{Name: "etcd2", Host: "localhost", EtcdClientPort: 24600, EtcdPeerPort: 23600, RelayPort: 25600, APIPort: 26600}
-	config := Config{}
+	node := etcd.Node{Name: "etcd2", Host: "localhost", EtcdClientPort: 24600, EtcdPeerPort: 23600, RelayPort: 25600, APIPort: 26600}
+	config := etcd.Config{}
 	config.AddNode(node)
 
-	server := CreateEtcdServer(node, config, ".")
+	server := etcd.CreateEtcdServer(node, config, ".")
 	colonyName := "test_colony"
 
 	// Test methods fail when etcd client is not initialized
@@ -146,15 +145,15 @@ func TestEtcdAssignmentsPauseResumeWithoutClient(t *testing.T) {
 }
 
 func TestEtcdAssignmentsPauseResumeMultiNode(t *testing.T) {
-	node1 := Node{Name: "etcd1", Host: "localhost", EtcdClientPort: 24700, EtcdPeerPort: 23700, RelayPort: 25700, APIPort: 26700}
-	node2 := Node{Name: "etcd2", Host: "localhost", EtcdClientPort: 24800, EtcdPeerPort: 23800, RelayPort: 25800, APIPort: 26800}
+	node1 := etcd.Node{Name: "etcd1", Host: "localhost", EtcdClientPort: 24700, EtcdPeerPort: 23700, RelayPort: 25700, APIPort: 26700}
+	node2 := etcd.Node{Name: "etcd2", Host: "localhost", EtcdClientPort: 24800, EtcdPeerPort: 23800, RelayPort: 25800, APIPort: 26800}
 
-	config := Config{}
+	config := etcd.Config{}
 	config.AddNode(node1)
 	config.AddNode(node2)
 
-	server1 := CreateEtcdServer(node1, config, ".")
-	server2 := CreateEtcdServer(node2, config, ".")
+	server1 := etcd.CreateEtcdServer(node1, config, ".")
+	server2 := etcd.CreateEtcdServer(node2, config, ".")
 
 	server1.Start()
 	server2.Start()

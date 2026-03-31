@@ -17,7 +17,7 @@ import (
 
 	"github.com/colonyos/colonies/pkg/client"
 	"github.com/colonyos/colonies/pkg/core"
-	"github.com/colonyos/colonies/pkg/fs/s3"
+	"github.com/colonyos/colonies/plugin/s3"
 	"github.com/colonyos/colonies/pkg/security/crypto"
 	"github.com/colonyos/colonies/pkg/utils"
 	"github.com/jedib0t/go-pretty/v6/progress"

@@ -8,6 +8,7 @@ import (
 	"github.com/colonyos/colonies/pkg/cluster"
 	"github.com/colonyos/colonies/pkg/constants"
 	"github.com/colonyos/colonies/pkg/core"
+	"github.com/colonyos/colonies/plugin/etcd"
 	"github.com/colonyos/colonies/pkg/security/crypto"
 	"github.com/colonyos/colonies/pkg/utils"
 	"github.com/stretchr/testify/assert"
@@ -42,6 +43,17 @@ func TestChannelEndToEndIntegration(t *testing.T) {
 		Nodes: []cluster.Node{thisNode},
 	}
 
+	etcdNode := etcd.Node{Name: thisNode.Name, Host: thisNode.Host, EtcdClientPort: thisNode.EtcdClientPort, EtcdPeerPort: thisNode.EtcdPeerPort, RelayPort: thisNode.RelayPort, APIPort: thisNode.APIPort}
+	etcdConfig := etcd.Config{}
+	for _, n := range clusterConfig.Nodes {
+		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
+	}
+	etcdDataPath := "/tmp/test-etcd-" + time.Now().Format("20060102150405")
+	clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, etcdDataPath)
+	clusterNode.Start()
+	clusterNode.WaitToStart()
+	relayServer := etcd.CreateRelayServer(etcdNode, etcdConfig)
+
 	server := CreateServer(
 		db,
 		port,
@@ -49,8 +61,8 @@ func TestChannelEndToEndIntegration(t *testing.T) {
 		"",
 		"",
 		thisNode,
-		clusterConfig,
-		"/tmp/test-etcd-"+time.Now().Format("20060102150405"), // etcd path in /tmp
+		clusterNode,
+		relayServer,
 		10,    // generator period
 		10,    // cron period
 		false, // exclusive assign
@@ -233,6 +245,17 @@ func TestChannelCleanupOnProcessFail(t *testing.T) {
 		Nodes: []cluster.Node{thisNode},
 	}
 
+	etcdNode2 := etcd.Node{Name: thisNode.Name, Host: thisNode.Host, EtcdClientPort: thisNode.EtcdClientPort, EtcdPeerPort: thisNode.EtcdPeerPort, RelayPort: thisNode.RelayPort, APIPort: thisNode.APIPort}
+	etcdConfig2 := etcd.Config{}
+	for _, n := range clusterConfig.Nodes {
+		etcdConfig2.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
+	}
+	etcdDataPath2 := "/tmp/test-etcd-fail-" + time.Now().Format("20060102150405")
+	clusterNode2 := etcd.CreateEtcdServer(etcdNode2, etcdConfig2, etcdDataPath2)
+	clusterNode2.Start()
+	clusterNode2.WaitToStart()
+	relayServer2 := etcd.CreateRelayServer(etcdNode2, etcdConfig2)
+
 	server := CreateServer(
 		db,
 		port,
@@ -240,8 +263,8 @@ func TestChannelCleanupOnProcessFail(t *testing.T) {
 		"",
 		"",
 		thisNode,
-		clusterConfig,
-		"/tmp/test-etcd-fail-"+time.Now().Format("20060102150405"),
+		clusterNode2,
+		relayServer2,
 		10,    // generator period
 		10,    // cron period
 		false, // exclusive assign

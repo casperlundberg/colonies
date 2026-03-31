@@ -38,22 +38,22 @@ coverage:
 	./buildtools/codecov
 
 build_cryptolib_ubuntu_2020:
-	cd buildtools; ./build_cryptolib_ubuntu.sh 
+	cd buildtools; ./build_cryptolib_ubuntu.sh
 
 test:
 	@cd tests/reliability; go test -v --race
 	@cd internal/crypto; go test -v --race
 	@cd pkg/core; go test -v --race
 ifeq ($(COLONIES_DB_TYPE),embedded)
-	@go test -v --race ./pkg/database/embedded/...
+	@go test -v --race ./plugin/embedded/...
 else
-	@cd pkg/database/postgresql; go test -v --race
+	@go test -v --race ./plugin/postgresql/...
 endif
 	@cd pkg/rpc; go test -v --race
 	@cd pkg/security; go test -v --race
 	@cd pkg/security/crypto; go test -v --race
 	@cd pkg/security/validator; go test -v --race
-	@cd pkg/backends/gin; go test -v --race
+	@go test -v --race ./plugin/gin/...
 	@cd pkg/client; go test -v --race
 	@cd pkg/client/backends; go test -v --race
 	@cd pkg/client/gin; go test -v --race
@@ -87,17 +87,32 @@ endif
 	@cd pkg/cluster; go test -v --race
 	@cd pkg/cron; go test -v --race
 	@cd pkg/fs; go test -v --race
-	@cd pkg/fs/localstore; go test -v --race
+	@go test -v --race ./plugin/localfs/...
 ifneq ($(COLONIES_FILE_STORAGE_TYPE),coloniesfs)
-	@cd pkg/fs/s3; go test -v --race
+	@go test -v --race ./plugin/s3/...
 endif
+
+github_test:
+	@cd internal/crypto; go test -v --race
+	@cd pkg/core; go test -v --race
+	@go test -v --race ./plugin/embedded/...
+	@cd pkg/rpc; go test -v --race
+	@cd pkg/security; go test -v --race
+	@cd pkg/security/crypto; go test -v --race
+	@go test -v --race ./plugin/gin/...
+	@cd pkg/scheduler; go test -v --race
+	@cd pkg/parsers; go test -v --race
+	@cd pkg/utils; go test -v --race
+	@cd pkg/validate; go test -v --race
+	@cd pkg/channel; go test -v --race
+	@cd pkg/cron; go test -v --race
 
 install:
 	cp ./bin/colonies /usr/local/bin
 	cp ./lib/libcryptolib.so /usr/local/lib
 	cp ./lib/libcfslib.so /usr/local/lib
 
-startdb: 
+startdb:
 	docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=rFcLGNkgsNtksg6Pgtn9CumL4xXBQ7 --restart unless-stopped timescale/timescaledb:latest-pg16
 
 nukedb:

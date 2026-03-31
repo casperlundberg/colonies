@@ -140,6 +140,48 @@ The [Colonies Dashboard](https://github.com/colonyos/dashboard) provides a web U
 - [Haskell SDK](https://github.com/colonyos/haskell) - Haskell client library
 - [Executors](https://github.com/colonyos/executors) - Pre-built executor implementations
 
+## Plugin Architecture
+
+ColonyOS uses a plugin architecture for backend implementations. Default plugins ship in-repo under `plugin/`. External plugins can be built in separate repositories.
+
+### Built-in Plugins
+
+| Directory | Description |
+|---|---|
+| `plugin/postgresql` | PostgreSQL/TimescaleDB database backend |
+| `plugin/embedded` | Embedded key-value database for development and edge deployments |
+| `plugin/gin` | Gin HTTP framework adapter |
+| `plugin/localfs` | Local filesystem storage |
+| `plugin/s3` | S3-compatible object storage |
+| `plugin/etcd` | etcd-based clustering and high availability |
+| `plugin/prometheus` | Prometheus metrics |
+
+### Custom Builds
+
+Users can build custom server binaries by creating a `main.go` that imports the kernel and selected plugins:
+
+```go
+package main
+
+import (
+    "github.com/colonyos/colonies/internal/cli"
+    "github.com/colonyos/colonies/pkg/build"
+
+    _ "github.com/colonyos/colonies/plugin/embedded"
+    _ "github.com/colonyos/colonies/plugin/gin"
+    _ "github.com/colonyos/colonies/plugin/localfs"
+)
+
+func main() {
+    build.BuildVersion = "custom"
+    cli.Execute()
+}
+```
+
+### External Plugins
+
+External plugins implement the interfaces in `pkg/database/`, `pkg/backends/`, `pkg/fs/`, `pkg/cluster/`, or `pkg/monitoring/` and register via `init()`. See `plugin/` for reference implementations.
+
 ## Development
 The repository contains a development container configuration to simplify development environment setup. You can use it locally or in a [GitHub Codespace](https://docs.github.com/en/codespaces). The configuration will launch a TimescaleDB-insance for the ColonyOS database, a MinIO instance for the ColonyOS file system and the actual development container. It will automatically generate required credentials and keys unique to your environment, no furhter configuration needed. 
 
@@ -170,7 +212,7 @@ For detailed instructions on building containers including multi-platform builds
 
 ```bash
 make test              # Run all tests
-make github_test       # Run tests for CI (no color output)
+make github_test       # Run tests without external services (CI-safe)
 ```
 
 ### Code Coverage

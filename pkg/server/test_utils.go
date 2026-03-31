@@ -16,8 +16,10 @@ import (
 	"github.com/colonyos/colonies/pkg/constants"
 	"github.com/colonyos/colonies/pkg/core"
 	"github.com/colonyos/colonies/pkg/database"
-	"github.com/colonyos/colonies/pkg/database/embedded"
-	"github.com/colonyos/colonies/pkg/database/postgresql"
+	"github.com/colonyos/colonies/plugin/embedded"
+	"github.com/colonyos/colonies/plugin/etcd"
+	ginplugin "github.com/colonyos/colonies/plugin/gin"
+	"github.com/colonyos/colonies/plugin/postgresql"
 	"github.com/colonyos/colonies/pkg/rpc"
 	"github.com/colonyos/colonies/pkg/security/crypto"
 	"github.com/colonyos/colonies/pkg/server/controllers"
@@ -245,7 +247,18 @@ func prepareTestsWithRetention(t *testing.T, retention bool) (*client.ColoniesCl
 	node := cluster.Node{Name: "etcd", Host: "localhost", EtcdClientPort: 24100, EtcdPeerPort: 23100, RelayPort: 25100, APIPort: constants.TESTPORT}
 	clusterConfig := cluster.Config{}
 	clusterConfig.AddNode(node)
-	server := CreateServer(db, constants.TESTPORT, EnableTLS, "", "", node, clusterConfig, etcdDataDir, constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, false, false, retention, 1, 500, time.Duration(constants.DEFAULT_STALE_EXECUTOR_DURATION)*time.Second, "", "")
+
+	etcdNode := etcd.Node{Name: node.Name, Host: node.Host, EtcdClientPort: node.EtcdClientPort, EtcdPeerPort: node.EtcdPeerPort, RelayPort: node.RelayPort, APIPort: node.APIPort}
+	etcdConfig := etcd.Config{}
+	for _, n := range clusterConfig.Nodes {
+		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
+	}
+	clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, etcdDataDir)
+	clusterNode.Start()
+	clusterNode.WaitToStart()
+	relayServer := etcd.CreateRelayServer(etcdNode, etcdConfig)
+
+	server := CreateServer(db, constants.TESTPORT, EnableTLS, "", "", node, clusterNode, relayServer, constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, false, false, retention, 1, 500, time.Duration(constants.DEFAULT_STALE_EXECUTOR_DURATION)*time.Second, "", "")
 
 	done := make(chan bool)
 	go func() {
@@ -261,14 +274,38 @@ func createTestColoniesController(db database.Database) *controllers.ColoniesCon
 	node := cluster.Node{Name: "etcd", Host: "localhost", EtcdClientPort: 24100, EtcdPeerPort: 23100, RelayPort: 25100, APIPort: constants.TESTPORT}
 	clusterConfig := cluster.Config{}
 	clusterConfig.AddNode(node)
-	return controllers.CreateColoniesController(db, node, clusterConfig, "", constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, false, -1, 500, time.Duration(constants.DEFAULT_STALE_EXECUTOR_DURATION)*time.Second)
+
+	etcdNode := etcd.Node{Name: node.Name, Host: node.Host, EtcdClientPort: node.EtcdClientPort, EtcdPeerPort: node.EtcdPeerPort, RelayPort: node.RelayPort, APIPort: node.APIPort}
+	etcdConfig := etcd.Config{}
+	for _, n := range clusterConfig.Nodes {
+		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
+	}
+	clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, "")
+	clusterNode.Start()
+	clusterNode.WaitToStart()
+	relayServer := etcd.CreateRelayServer(etcdNode, etcdConfig)
+	realtimeBackend := ginplugin.NewFactory()
+
+	return controllers.CreateColoniesController(db, node, clusterNode, relayServer, realtimeBackend, constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, false, -1, 500, time.Duration(constants.DEFAULT_STALE_EXECUTOR_DURATION)*time.Second)
 }
 
 func createTestColoniesController2(db database.Database) *controllers.ColoniesController {
 	node := cluster.Node{Name: "etcd2", Host: "localhost", EtcdClientPort: 26100, EtcdPeerPort: 27100, RelayPort: 28100, APIPort: constants.TESTPORT}
 	clusterConfig := cluster.Config{}
 	clusterConfig.AddNode(node)
-	return controllers.CreateColoniesController(db, node, clusterConfig, "", constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, false, -1, 500, time.Duration(constants.DEFAULT_STALE_EXECUTOR_DURATION)*time.Second)
+
+	etcdNode := etcd.Node{Name: node.Name, Host: node.Host, EtcdClientPort: node.EtcdClientPort, EtcdPeerPort: node.EtcdPeerPort, RelayPort: node.RelayPort, APIPort: node.APIPort}
+	etcdConfig := etcd.Config{}
+	for _, n := range clusterConfig.Nodes {
+		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
+	}
+	clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, "")
+	clusterNode.Start()
+	clusterNode.WaitToStart()
+	relayServer := etcd.CreateRelayServer(etcdNode, etcdConfig)
+	realtimeBackend := ginplugin.NewFactory()
+
+	return controllers.CreateColoniesController(db, node, clusterNode, relayServer, realtimeBackend, constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, false, -1, 500, time.Duration(constants.DEFAULT_STALE_EXECUTOR_DURATION)*time.Second)
 }
 
 func GenerateDiamondtWorkflowSpec(colonyName string) *core.WorkflowSpec {
@@ -416,12 +453,23 @@ func StartCluster(t *testing.T, db database.Database, size int) []ServerInfo {
 
 	db.SetServerID("", serverID)
 
+	// Build the etcd config from the cluster config
+	etcdConfig := etcd.Config{}
+	for _, n := range clusterConfig.Nodes {
+		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
+	}
+
 	sChan := make(chan ServerInfo)
 	for i, node := range clusterConfig.Nodes {
 		go func(i int, node cluster.Node) {
 			log.WithFields(log.Fields{"APIPort": node.APIPort}).Info("Starting ColoniesServer")
 			etcdDataDir := filepath.Join(dataDir, "etcd"+strconv.Itoa(i))
-			server := CreateServer(db, node.APIPort, false, "", "", node, clusterConfig, etcdDataDir, constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, true, false, false, -1, 500, time.Duration(constants.DEFAULT_STALE_EXECUTOR_DURATION)*time.Second, "", "")
+			etcdNode := etcd.Node{Name: node.Name, Host: node.Host, EtcdClientPort: node.EtcdClientPort, EtcdPeerPort: node.EtcdPeerPort, RelayPort: node.RelayPort, APIPort: node.APIPort}
+			clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, etcdDataDir)
+			clusterNode.Start()
+			clusterNode.WaitToStart()
+			relayServer := etcd.CreateRelayServer(etcdNode, etcdConfig)
+			server := CreateServer(db, node.APIPort, false, "", "", node, clusterNode, relayServer, constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, true, false, false, -1, 500, time.Duration(constants.DEFAULT_STALE_EXECUTOR_DURATION)*time.Second, "", "")
 			done := make(chan struct{})
 			s := ServerInfo{ServerID: serverID, ServerPrvKey: serverPrvKey, Server: server, Node: node, Done: done}
 			go func(i int) {
@@ -469,13 +517,24 @@ func StartClusterDistributed(t *testing.T, db database.Database, size int) []Ser
 
 	db.SetServerID("", serverID)
 
+	// Build the etcd config from the cluster config
+	etcdConfig := etcd.Config{}
+	for _, n := range clusterConfig.Nodes {
+		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
+	}
+
 	sChan := make(chan ServerInfo)
 	for i, node := range clusterConfig.Nodes {
 		go func(i int, node cluster.Node) {
 			log.WithFields(log.Fields{"APIPort": node.APIPort}).Info("Starting ColoniesServer")
 			etcdDataDir := filepath.Join(dataDir, "etcd"+strconv.Itoa(i))
+			etcdNode := etcd.Node{Name: node.Name, Host: node.Host, EtcdClientPort: node.EtcdClientPort, EtcdPeerPort: node.EtcdPeerPort, RelayPort: node.RelayPort, APIPort: node.APIPort}
+			clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, etcdDataDir)
+			clusterNode.Start()
+			clusterNode.WaitToStart()
+			relayServer := etcd.CreateRelayServer(etcdNode, etcdConfig)
 			// ExclusiveAssign=false for distributed assignment
-			server := CreateServer(db, node.APIPort, false, "", "", node, clusterConfig, etcdDataDir, constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, false, false, false, -1, 500, time.Duration(constants.DEFAULT_STALE_EXECUTOR_DURATION)*time.Second, "", "")
+			server := CreateServer(db, node.APIPort, false, "", "", node, clusterNode, relayServer, constants.GENERATOR_TRIGGER_PERIOD, constants.CRON_TRIGGER_PERIOD, false, false, false, -1, 500, time.Duration(constants.DEFAULT_STALE_EXECUTOR_DURATION)*time.Second, "", "")
 			done := make(chan struct{})
 			s := ServerInfo{ServerID: serverID, ServerPrvKey: serverPrvKey, Server: server, Node: node, Done: done}
 			go func(i int) {

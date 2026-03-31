@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/colonyos/colonies/pkg/backends"
-	ginbackends "github.com/colonyos/colonies/pkg/backends/gin"
+	ginbackends "github.com/colonyos/colonies/plugin/gin"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )

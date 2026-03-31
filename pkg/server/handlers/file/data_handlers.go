@@ -12,7 +12,7 @@ import (
 	"github.com/colonyos/colonies/pkg/backends"
 	"github.com/colonyos/colonies/pkg/core"
 	"github.com/colonyos/colonies/pkg/database"
-	"github.com/colonyos/colonies/pkg/fs/localstore"
+	localfs "github.com/colonyos/colonies/plugin/localfs"
 	"github.com/colonyos/colonies/pkg/security"
 	log "github.com/sirupsen/logrus"
 )
@@ -28,11 +28,11 @@ type DataServer interface {
 // DataHandlers implements HTTP handlers for file data upload/download/delete.
 type DataHandlers struct {
 	server      DataServer
-	objectStore localstore.ObjectStore
+	objectStore localfs.ObjectStore
 }
 
 // NewDataHandlers creates a new DataHandlers instance.
-func NewDataHandlers(server DataServer, objectStore localstore.ObjectStore) *DataHandlers {
+func NewDataHandlers(server DataServer, objectStore localfs.ObjectStore) *DataHandlers {
 	return &DataHandlers{
 		server:      server,
 		objectStore: objectStore,

@@ -6,8 +6,8 @@ import (
 
 	"github.com/colonyos/colonies/pkg/core"
 	"github.com/colonyos/colonies/pkg/database"
-	"github.com/colonyos/colonies/pkg/database/embedded"
-	"github.com/colonyos/colonies/pkg/database/postgresql"
+	"github.com/colonyos/colonies/plugin/embedded"
+	"github.com/colonyos/colonies/plugin/postgresql"
 	"github.com/stretchr/testify/assert"
 )
 

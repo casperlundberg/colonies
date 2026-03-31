@@ -12,7 +12,7 @@ import (
 type Controller interface {
 	GetCronPeriod() int
 	GetGeneratorPeriod() int
-	GetEtcdServer() *cluster.EtcdServer
+	GetCluster() cluster.Cluster
 	GetEventHandler() backends.RealtimeEventHandler
 	GetThisNode() cluster.Node
 	SubscribeProcesses(executorID string, subscription *backends.RealtimeSubscription) error

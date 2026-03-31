@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/colonyos/colonies/pkg/backends"
-	backendGin "github.com/colonyos/colonies/pkg/backends/gin"
 	"github.com/colonyos/colonies/pkg/channel"
 	"github.com/colonyos/colonies/pkg/cluster"
 	"github.com/colonyos/colonies/pkg/constants"
@@ -106,14 +105,13 @@ type ColoniesController struct {
 	blockingCmdQueue chan *command
 	scheduler        *scheduler.Scheduler
 	wsSubCtrl        backends.RealtimeSubscriptionController
-	relayServer      *cluster.RelayServer
+	relayServer      cluster.Relay
 	eventHandler     backends.RealtimeEventHandler
 	stopFlag         bool
 	stopMutex        sync.Mutex
 	leaderMutex      sync.Mutex
 	thisNode         cluster.Node
-	clusterConfig    cluster.Config
-	etcdServer       *cluster.EtcdServer
+	clusterNode      cluster.Cluster
 	leader           bool
 	generatorPeriod  int
 	cronPeriod       int
@@ -131,8 +129,9 @@ type ColoniesController struct {
 
 func CreateColoniesController(db database.Database,
 	thisNode cluster.Node,
-	clusterConfig cluster.Config,
-	etcdDataPath string,
+	clusterNode cluster.Cluster,
+	relayServer cluster.Relay,
+	realtimeBackend backends.RealtimeBackend,
 	generatorPeriod int,
 	cronPeriod int,
 	retention bool,
@@ -158,10 +157,7 @@ func CreateColoniesController(db database.Database,
 	controller.blueprintDB = db
 	controller.securityDB = db
 	controller.thisNode = thisNode
-	controller.clusterConfig = clusterConfig
-	controller.etcdServer = cluster.CreateEtcdServer(controller.thisNode, controller.clusterConfig, etcdDataPath)
-	controller.etcdServer.Start()
-	controller.etcdServer.WaitToStart()
+	controller.clusterNode = clusterNode
 	controller.leader = false
 	controller.generatorPeriod = generatorPeriod
 	controller.cronPeriod = cronPeriod
@@ -172,11 +168,10 @@ func CreateColoniesController(db database.Database,
 	controller.pauseChannels = make(map[string][]chan bool)
 	controller.channelRouter = channel.NewRouter()
 
-	controller.relayServer = cluster.CreateRelayServer(controller.thisNode, controller.clusterConfig)
+	controller.relayServer = relayServer
 
-	factory := backendGin.NewFactory()
-	controller.eventHandler = factory.CreateEventHandler(controller.relayServer)
-	controller.wsSubCtrl = factory.CreateSubscriptionController(controller.eventHandler)
+	controller.eventHandler = realtimeBackend.CreateEventHandler(controller.relayServer)
+	controller.wsSubCtrl = realtimeBackend.CreateSubscriptionController(controller.eventHandler)
 	controller.scheduler = scheduler.CreateScheduler(controller.processDB)
 
 	controller.cmdQueue = make(chan *command)
@@ -202,8 +197,8 @@ func (controller *ColoniesController) GetGeneratorPeriod() int {
 	return controller.generatorPeriod
 }
 
-func (controller *ColoniesController) GetEtcdServer() *cluster.EtcdServer {
-	return controller.etcdServer
+func (controller *ColoniesController) GetCluster() cluster.Cluster {
+	return controller.clusterNode
 }
 
 func (controller *ColoniesController) GetEventHandler() backends.RealtimeEventHandler {
@@ -1406,11 +1401,11 @@ func (controller *ColoniesController) ResetDatabase() error {
 }
 
 func (controller *ColoniesController) PauseColonyAssignments(colonyName string) error {
-	return controller.etcdServer.PauseColonyAssignments(colonyName)
+	return controller.clusterNode.PauseColonyAssignments(colonyName)
 }
 
 func (controller *ColoniesController) ResumeColonyAssignments(colonyName string) error {
-	err := controller.etcdServer.ResumeColonyAssignments(colonyName)
+	err := controller.clusterNode.ResumeColonyAssignments(colonyName)
 	if err != nil {
 		return err
 	}
@@ -1421,7 +1416,7 @@ func (controller *ColoniesController) ResumeColonyAssignments(colonyName string)
 }
 
 func (controller *ColoniesController) AreColonyAssignmentsPaused(colonyName string) (bool, error) {
-	return controller.etcdServer.AreColonyAssignmentsPaused(colonyName)
+	return controller.clusterNode.AreColonyAssignmentsPaused(colonyName)
 }
 
 // createResumeChannel creates a channel that will be signaled when assignments are resumed for a colony
@@ -1463,7 +1458,7 @@ func (controller *ColoniesController) Stop() {
 	controller.cmdQueue <- &command{stop: true}
 	controller.eventHandler.Stop()
 	controller.relayServer.Shutdown()
-	controller.etcdServer.Stop()
-	controller.etcdServer.WaitToStop()
-	os.RemoveAll(controller.etcdServer.StorageDir())
+	controller.clusterNode.Stop()
+	controller.clusterNode.WaitToStop()
+	os.RemoveAll(controller.clusterNode.StorageDir())
 }

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/colonyos/colonies/pkg/database/postgresql"
+	"github.com/colonyos/colonies/plugin/postgresql"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )

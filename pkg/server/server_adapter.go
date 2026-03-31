@@ -2,7 +2,7 @@ package server
 
 import (
 	"github.com/colonyos/colonies/pkg/backends"
-	"github.com/colonyos/colonies/pkg/backends/gin"
+	"github.com/colonyos/colonies/plugin/gin"
 	"github.com/colonyos/colonies/pkg/channel"
 	"github.com/colonyos/colonies/pkg/cluster"
 	"github.com/colonyos/colonies/pkg/core"
@@ -179,7 +179,7 @@ type processControllerAdapter struct {
 		AreColonyAssignmentsPaused(colonyName string) (bool, error)
 		GetEventHandler() backends.RealtimeEventHandler
 		IsLeader() bool
-		GetEtcdServer() *cluster.EtcdServer
+		GetCluster() cluster.Cluster
 	}
 }
 
@@ -255,16 +255,16 @@ func (c *processControllerAdapter) IsLeader() bool {
 }
 
 func (c *processControllerAdapter) GetEtcdServer() process.EtcdServer {
-	etcdServer := c.controller.GetEtcdServer()
-	return &etcdServerAdapter{etcdServer: etcdServer}
+	clusterNode := c.controller.GetCluster()
+	return &etcdServerAdapter{clusterNode: clusterNode}
 }
 
 type etcdServerAdapter struct {
-	etcdServer *cluster.EtcdServer
+	clusterNode cluster.Cluster
 }
 
 func (e *etcdServerAdapter) CurrentCluster() process.Cluster {
-	clusterConfig := e.etcdServer.CurrentCluster()
+	clusterConfig := e.clusterNode.CurrentCluster()
 	return &clusterAdapter{cluster: &clusterConfig}
 }
 
@@ -481,21 +481,21 @@ func (s *ServerAdapter) ProcessgraphServer() processgraph.Server {
 // Server handler controller adapter
 type serverControllerAdapter struct {
 	controller interface {
-		GetEtcdServer() *cluster.EtcdServer
+		GetCluster() cluster.Cluster
 	}
 }
 
 func (c *serverControllerAdapter) GetEtcdServer() serverhandlers.EtcdServer {
-	etcdServer := c.controller.GetEtcdServer()
-	return &serverEtcdServerAdapter{etcdServer: etcdServer}
+	clusterNode := c.controller.GetCluster()
+	return &serverEtcdServerAdapter{clusterNode: clusterNode}
 }
 
 type serverEtcdServerAdapter struct {
-	etcdServer *cluster.EtcdServer
+	clusterNode cluster.Cluster
 }
 
 func (e *serverEtcdServerAdapter) CurrentCluster() cluster.Config {
-	return e.etcdServer.CurrentCluster()
+	return e.clusterNode.CurrentCluster()
 }
 
 func (s *ServerAdapter) ServerController() serverhandlers.Controller {

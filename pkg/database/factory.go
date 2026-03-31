@@ -3,8 +3,8 @@ package database
 import (
 	"fmt"
 
-	"github.com/colonyos/colonies/pkg/database/embedded"
-	"github.com/colonyos/colonies/pkg/database/postgresql"
+	"github.com/colonyos/colonies/plugin/embedded"
+	"github.com/colonyos/colonies/plugin/postgresql"
 	log "github.com/sirupsen/logrus"
 )
 

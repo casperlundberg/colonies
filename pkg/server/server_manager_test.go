@@ -8,8 +8,47 @@ import (
 	"github.com/colonyos/colonies/pkg/cluster"
 	"github.com/colonyos/colonies/pkg/constants"
 	"github.com/colonyos/colonies/pkg/security/crypto"
+	"github.com/colonyos/colonies/plugin/etcd"
 	"github.com/stretchr/testify/assert"
 )
+
+// createTestCluster creates a real etcd cluster and relay server for testing.
+// Each test must use unique ports to avoid conflicts.
+func createTestCluster(t *testing.T, node cluster.Node) (cluster.Cluster, cluster.Relay) {
+	t.Helper()
+
+	dataDir := t.TempDir()
+
+	clusterConfig := cluster.Config{}
+	clusterConfig.AddNode(node)
+
+	etcdNode := etcd.Node{
+		Name:           node.Name,
+		Host:           node.Host,
+		EtcdClientPort: node.EtcdClientPort,
+		EtcdPeerPort:   node.EtcdPeerPort,
+		RelayPort:      node.RelayPort,
+		APIPort:        node.APIPort,
+	}
+	etcdConfig := etcd.Config{}
+	for _, n := range clusterConfig.Nodes {
+		etcdConfig.AddNode(etcd.Node{
+			Name:           n.Name,
+			Host:           n.Host,
+			EtcdClientPort: n.EtcdClientPort,
+			EtcdPeerPort:   n.EtcdPeerPort,
+			RelayPort:      n.RelayPort,
+			APIPort:        n.APIPort,
+		})
+	}
+
+	clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, dataDir)
+	clusterNode.Start()
+	clusterNode.WaitToStart()
+	relayServer := etcd.CreateRelayServer(etcdNode, etcdConfig)
+
+	return clusterNode, relayServer
+}
 
 func TestServerManagerCreation(t *testing.T) {
 	db, err := prepareTestDB("")
@@ -19,18 +58,22 @@ func TestServerManagerCreation(t *testing.T) {
 	node := cluster.Node{
 		Name:           "test-node",
 		Host:           "localhost",
-		EtcdClientPort: 24100,
-		EtcdPeerPort:   23100,
-		RelayPort:      25100,
+		EtcdClientPort: 30100,
+		EtcdPeerPort:   30200,
+		RelayPort:      30300,
 		APIPort:        constants.TESTPORT,
 	}
 	clusterConfig := cluster.Config{}
 	clusterConfig.AddNode(node)
 
+	clusterNode, relayServer := createTestCluster(t, node)
+
 	sm := NewServerManager(
 		db,
 		node,
 		clusterConfig,
+		clusterNode,
+		relayServer,
 		"/tmp/colonies/etcd",
 		constants.GENERATOR_TRIGGER_PERIOD,
 		constants.CRON_TRIGGER_PERIOD,
@@ -48,18 +91,22 @@ func TestServerManagerBackendFactoryRegistration(t *testing.T) {
 	node := cluster.Node{
 		Name:           "test-node",
 		Host:           "localhost",
-		EtcdClientPort: 24100,
-		EtcdPeerPort:   23100,
-		RelayPort:      25100,
+		EtcdClientPort: 30400,
+		EtcdPeerPort:   30500,
+		RelayPort:      30600,
 		APIPort:        constants.TESTPORT,
 	}
 	clusterConfig := cluster.Config{}
 	clusterConfig.AddNode(node)
 
+	clusterNode, relayServer := createTestCluster(t, node)
+
 	sm := NewServerManager(
 		db,
 		node,
 		clusterConfig,
+		clusterNode,
+		relayServer,
 		"/tmp/colonies/etcd",
 		constants.GENERATOR_TRIGGER_PERIOD,
 		constants.CRON_TRIGGER_PERIOD,
@@ -90,18 +137,22 @@ func TestServerManagerConfigManagement(t *testing.T) {
 	node := cluster.Node{
 		Name:           "test-node",
 		Host:           "localhost",
-		EtcdClientPort: 24100,
-		EtcdPeerPort:   23100,
-		RelayPort:      25100,
+		EtcdClientPort: 30700,
+		EtcdPeerPort:   30800,
+		RelayPort:      30900,
 		APIPort:        constants.TESTPORT,
 	}
 	clusterConfig := cluster.Config{}
 	clusterConfig.AddNode(node)
 
+	clusterNode, relayServer := createTestCluster(t, node)
+
 	sm := NewServerManager(
 		db,
 		node,
 		clusterConfig,
+		clusterNode,
+		relayServer,
 		"/tmp/colonies/etcd",
 		constants.GENERATOR_TRIGGER_PERIOD,
 		constants.CRON_TRIGGER_PERIOD,
@@ -110,16 +161,16 @@ func TestServerManagerConfigManagement(t *testing.T) {
 	// Add gin server config
 	ginConfig := &ServerConfig{
 		BackendType:             GinBackendType,
-		Port:                   constants.TESTPORT + 100,
-		TLS:                    false,
-		TLSPrivateKeyPath:      "",
-		TLSCertPath:            "",
-		ExclusiveAssign:        true,
+		Port:                    constants.TESTPORT + 100,
+		TLS:                     false,
+		TLSPrivateKeyPath:       "",
+		TLSCertPath:             "",
+		ExclusiveAssign:         true,
 		AllowExecutorReregister: false,
-		Retention:              false,
-		RetentionPolicy:        -1,
-		RetentionPeriod:        500,
-		Enabled:                true,
+		Retention:               false,
+		RetentionPolicy:         -1,
+		RetentionPeriod:         500,
+		Enabled:                 true,
 	}
 
 	err = sm.AddServerConfig(ginConfig)
@@ -134,7 +185,7 @@ func TestServerManagerConfigManagement(t *testing.T) {
 	sm.running = true
 	err = sm.AddServerConfig(&ServerConfig{
 		BackendType: "test",
-		Enabled:    true,
+		Enabled:     true,
 	})
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "cannot add server config while server manager is running")
@@ -157,18 +208,22 @@ func TestServerManagerLifecycle(t *testing.T) {
 	node := cluster.Node{
 		Name:           "test-node",
 		Host:           "localhost",
-		EtcdClientPort: 24100,
-		EtcdPeerPort:   23100,
-		RelayPort:      25100,
+		EtcdClientPort: 31000,
+		EtcdPeerPort:   31100,
+		RelayPort:      31200,
 		APIPort:        constants.TESTPORT + 300,
 	}
 	clusterConfig := cluster.Config{}
 	clusterConfig.AddNode(node)
 
+	clusterNode, relayServer := createTestCluster(t, node)
+
 	sm := NewServerManager(
 		db,
 		node,
 		clusterConfig,
+		clusterNode,
+		relayServer,
 		"/tmp/colonies/etcd",
 		constants.GENERATOR_TRIGGER_PERIOD,
 		constants.CRON_TRIGGER_PERIOD,
@@ -181,16 +236,16 @@ func TestServerManagerLifecycle(t *testing.T) {
 
 	ginConfig := &ServerConfig{
 		BackendType:             GinBackendType,
-		Port:                   constants.TESTPORT + 300,
-		TLS:                    false,
-		TLSPrivateKeyPath:      "",
-		TLSCertPath:            "",
-		ExclusiveAssign:        true,
+		Port:                    constants.TESTPORT + 300,
+		TLS:                     false,
+		TLSPrivateKeyPath:       "",
+		TLSCertPath:             "",
+		ExclusiveAssign:         true,
 		AllowExecutorReregister: false,
-		Retention:              false,
-		RetentionPolicy:        -1,
-		RetentionPeriod:        500,
-		Enabled:                true,
+		Retention:               false,
+		RetentionPolicy:         -1,
+		RetentionPeriod:         500,
+		Enabled:                 true,
 	}
 
 	err = sm.AddServerConfig(ginConfig)
@@ -247,18 +302,22 @@ func TestServerManagerMissingFactory(t *testing.T) {
 	node := cluster.Node{
 		Name:           "test-node",
 		Host:           "localhost",
-		EtcdClientPort: 24100,
-		EtcdPeerPort:   23100,
-		RelayPort:      25100,
+		EtcdClientPort: 31300,
+		EtcdPeerPort:   31400,
+		RelayPort:      31500,
 		APIPort:        constants.TESTPORT + 400,
 	}
 	clusterConfig := cluster.Config{}
 	clusterConfig.AddNode(node)
 
+	clusterNode, relayServer := createTestCluster(t, node)
+
 	sm := NewServerManager(
 		db,
 		node,
 		clusterConfig,
+		clusterNode,
+		relayServer,
 		"/tmp/colonies/etcd",
 		constants.GENERATOR_TRIGGER_PERIOD,
 		constants.CRON_TRIGGER_PERIOD,
@@ -267,8 +326,8 @@ func TestServerManagerMissingFactory(t *testing.T) {
 	// Add config without registering factory
 	ginConfig := &ServerConfig{
 		BackendType: GinBackendType,
-		Port:       constants.TESTPORT + 400,
-		Enabled:    true,
+		Port:        constants.TESTPORT + 400,
+		Enabled:     true,
 	}
 
 	err = sm.AddServerConfig(ginConfig)
@@ -297,18 +356,22 @@ func TestServerManagerStopTimeout(t *testing.T) {
 	node := cluster.Node{
 		Name:           "test-node",
 		Host:           "localhost",
-		EtcdClientPort: 24100,
-		EtcdPeerPort:   23100,
-		RelayPort:      25100,
+		EtcdClientPort: 31600,
+		EtcdPeerPort:   31700,
+		RelayPort:      31800,
 		APIPort:        constants.TESTPORT + 500,
 	}
 	clusterConfig := cluster.Config{}
 	clusterConfig.AddNode(node)
 
+	clusterNode, relayServer := createTestCluster(t, node)
+
 	sm := NewServerManager(
 		db,
 		node,
 		clusterConfig,
+		clusterNode,
+		relayServer,
 		"/tmp/colonies/etcd",
 		constants.GENERATOR_TRIGGER_PERIOD,
 		constants.CRON_TRIGGER_PERIOD,
@@ -321,16 +384,16 @@ func TestServerManagerStopTimeout(t *testing.T) {
 
 	ginConfig := &ServerConfig{
 		BackendType:             GinBackendType,
-		Port:                   constants.TESTPORT + 500,
-		TLS:                    false,
-		TLSPrivateKeyPath:      "",
-		TLSCertPath:            "",
-		ExclusiveAssign:        true,
+		Port:                    constants.TESTPORT + 500,
+		TLS:                     false,
+		TLSPrivateKeyPath:       "",
+		TLSCertPath:             "",
+		ExclusiveAssign:         true,
 		AllowExecutorReregister: false,
-		Retention:              false,
-		RetentionPolicy:        -1,
-		RetentionPeriod:        500,
-		Enabled:                true,
+		Retention:               false,
+		RetentionPolicy:         -1,
+		RetentionPeriod:         500,
+		Enabled:                 true,
 	}
 
 	err = sm.AddServerConfig(ginConfig)
@@ -366,18 +429,22 @@ func TestServerManagerHealthCheck(t *testing.T) {
 	node := cluster.Node{
 		Name:           "test-node",
 		Host:           "localhost",
-		EtcdClientPort: 24100,
-		EtcdPeerPort:   23100,
-		RelayPort:      25100,
+		EtcdClientPort: 31900,
+		EtcdPeerPort:   32000,
+		RelayPort:      32100,
 		APIPort:        constants.TESTPORT + 600,
 	}
 	clusterConfig := cluster.Config{}
 	clusterConfig.AddNode(node)
 
+	clusterNode, relayServer := createTestCluster(t, node)
+
 	sm := NewServerManager(
 		db,
 		node,
 		clusterConfig,
+		clusterNode,
+		relayServer,
 		"/tmp/colonies/etcd",
 		constants.GENERATOR_TRIGGER_PERIOD,
 		constants.CRON_TRIGGER_PERIOD,
@@ -396,16 +463,16 @@ func TestServerManagerHealthCheck(t *testing.T) {
 
 	ginConfig := &ServerConfig{
 		BackendType:             GinBackendType,
-		Port:                   constants.TESTPORT + 600,
-		TLS:                    false,
-		TLSPrivateKeyPath:      "",
-		TLSCertPath:            "",
-		ExclusiveAssign:        true,
+		Port:                    constants.TESTPORT + 600,
+		TLS:                     false,
+		TLSPrivateKeyPath:       "",
+		TLSCertPath:             "",
+		ExclusiveAssign:         true,
 		AllowExecutorReregister: false,
-		Retention:              false,
-		RetentionPolicy:        -1,
-		RetentionPeriod:        500,
-		Enabled:                true,
+		Retention:               false,
+		RetentionPolicy:         -1,
+		RetentionPeriod:         500,
+		Enabled:                 true,
 	}
 
 	err = sm.AddServerConfig(ginConfig)

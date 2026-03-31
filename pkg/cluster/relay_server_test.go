@@ -1,9 +1,10 @@
-package cluster
+package cluster_test
 
 import (
 	"io/ioutil"
 	"testing"
 
+	"github.com/colonyos/colonies/plugin/etcd"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
@@ -12,18 +13,18 @@ func TestRelayServer(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 	gin.DefaultWriter = ioutil.Discard
 
-	node1 := Node{Name: "etcd1", Host: "localhost", EtcdClientPort: 24100, EtcdPeerPort: 23100, RelayPort: 25100, APIPort: 26100}
-	node2 := Node{Name: "etcd2", Host: "localhost", EtcdClientPort: 24200, EtcdPeerPort: 23200, RelayPort: 25200, APIPort: 26200}
-	node3 := Node{Name: "etcd3", Host: "localhost", EtcdClientPort: 24300, EtcdPeerPort: 23300, RelayPort: 25300, APIPort: 26300}
+	node1 := etcd.Node{Name: "etcd1", Host: "localhost", EtcdClientPort: 24100, EtcdPeerPort: 23100, RelayPort: 25100, APIPort: 26100}
+	node2 := etcd.Node{Name: "etcd2", Host: "localhost", EtcdClientPort: 24200, EtcdPeerPort: 23200, RelayPort: 25200, APIPort: 26200}
+	node3 := etcd.Node{Name: "etcd3", Host: "localhost", EtcdClientPort: 24300, EtcdPeerPort: 23300, RelayPort: 25300, APIPort: 26300}
 
-	config := Config{}
+	config := etcd.Config{}
 	config.AddNode(node1)
 	config.AddNode(node2)
 	config.AddNode(node3)
 
-	relayServer1 := CreateRelayServer(node1, config)
-	relayServer2 := CreateRelayServer(node2, config)
-	relayServer3 := CreateRelayServer(node3, config)
+	relayServer1 := etcd.CreateRelayServer(node1, config)
+	relayServer2 := etcd.CreateRelayServer(node2, config)
+	relayServer3 := etcd.CreateRelayServer(node3, config)
 
 	defer relayServer1.Shutdown()
 	defer relayServer2.Shutdown()

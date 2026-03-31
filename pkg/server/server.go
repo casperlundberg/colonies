@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/colonyos/colonies/pkg/backends"
-	"github.com/colonyos/colonies/pkg/backends/gin"
+	"github.com/colonyos/colonies/plugin/gin"
 	"github.com/colonyos/colonies/pkg/channel"
 	"github.com/colonyos/colonies/pkg/cluster"
 	"github.com/colonyos/colonies/pkg/core"
 	"github.com/colonyos/colonies/pkg/database"
-	"github.com/colonyos/colonies/pkg/fs/localstore"
+	localfs "github.com/colonyos/colonies/plugin/localfs"
 	"github.com/colonyos/colonies/pkg/rpc"
 	"github.com/colonyos/colonies/pkg/security"
 	"github.com/colonyos/colonies/pkg/security/crypto"
@@ -105,7 +105,7 @@ type Server struct {
 	channelRouter          *channel.Router
 
 	// ColonyFS file storage
-	objectStore     localstore.ObjectStore
+	objectStore     localfs.ObjectStore
 	dataHandlers    *filehandlers.DataHandlers
 	fileStorageType string
 }
@@ -116,8 +116,8 @@ func CreateServer(db database.Database,
 	tlsPrivateKeyPath string,
 	tlsCertPath string,
 	thisNode cluster.Node,
-	clusterConfig cluster.Config,
-	etcdDataPath string,
+	clusterNode cluster.Cluster,
+	relayServer cluster.Relay,
 	generatorPeriod int,
 	cronPeriod int,
 	exclusiveAssign bool,
@@ -128,7 +128,7 @@ func CreateServer(db database.Database,
 	staleExecutorDuration time.Duration,
 	fileStorageType string,
 	fileStorageDir string) *Server {
-	return createServerInternal(db, port, tls, tlsPrivateKeyPath, tlsCertPath, thisNode, clusterConfig, etcdDataPath, generatorPeriod, cronPeriod, exclusiveAssign, allowExecutorReregister, retention, retentionPolicy, retentionPeriod, staleExecutorDuration, fileStorageType, fileStorageDir)
+	return createServerInternal(db, port, tls, tlsPrivateKeyPath, tlsCertPath, thisNode, clusterNode, relayServer, generatorPeriod, cronPeriod, exclusiveAssign, allowExecutorReregister, retention, retentionPolicy, retentionPeriod, staleExecutorDuration, fileStorageType, fileStorageDir)
 }
 
 func createServerInternal(db database.Database,
@@ -137,8 +137,8 @@ func createServerInternal(db database.Database,
 	tlsPrivateKeyPath string,
 	tlsCertPath string,
 	thisNode cluster.Node,
-	clusterConfig cluster.Config,
-	etcdDataPath string,
+	clusterNode cluster.Cluster,
+	relayServer cluster.Relay,
 	generatorPeriod int,
 	cronPeriod int,
 	exclusiveAssign bool,
@@ -173,7 +173,9 @@ func createServerInternal(db database.Database,
 	server.securityDB = db
 	server.locationDB = db
 
-	server.controller = controllers.CreateColoniesController(db, thisNode, clusterConfig, etcdDataPath, generatorPeriod, cronPeriod, retention, retentionPolicy, retentionPeriod, staleExecutorDuration)
+	realtimeBackend := gin.NewFactory()
+
+	server.controller = controllers.CreateColoniesController(db, thisNode, clusterNode, relayServer, realtimeBackend, generatorPeriod, cronPeriod, retention, retentionPolicy, retentionPeriod, staleExecutorDuration)
 
 	server.tls = tls
 	server.port = port
@@ -212,7 +214,7 @@ func createServerInternal(db database.Database,
 	// Initialize ColonyFS object store if configured
 	server.fileStorageType = fileStorageType
 	if fileStorageType == "coloniesfs" && fileStorageDir != "" {
-		store, err := localstore.NewLocalObjectStore(fileStorageDir)
+		store, err := localfs.NewLocalObjectStore(fileStorageDir)
 		if err != nil {
 			log.WithFields(log.Fields{"Error": err}).Fatal("Failed to create local object store")
 		}
@@ -235,7 +237,7 @@ func createServerInternal(db database.Database,
 		"APIPort":                 thisNode.APIPort,
 		"EtcdClientPort":          thisNode.EtcdClientPort,
 		"EtcdPeerPort":            thisNode.EtcdPeerPort,
-		"EtcdDataPath":            etcdDataPath,
+		"EtcdDataPath":            clusterNode.StorageDir(),
 		"Host":                    thisNode.Host,
 		"RelayPort":               thisNode.RelayPort,
 		"Name":                    thisNode.Name,

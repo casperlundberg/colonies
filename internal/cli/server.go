@@ -11,7 +11,8 @@ import (
 	"github.com/colonyos/colonies/pkg/client"
 	"github.com/colonyos/colonies/pkg/cluster"
 	"github.com/colonyos/colonies/pkg/database"
-	"github.com/colonyos/colonies/pkg/database/postgresql"
+	"github.com/colonyos/colonies/plugin/etcd"
+	"github.com/colonyos/colonies/plugin/postgresql"
 	"github.com/colonyos/colonies/pkg/server"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -65,6 +66,17 @@ func startServer(
 	// Convert stale executor duration from seconds to time.Duration
 	staleExecutorDuration := time.Duration(StaleExecutorDuration) * time.Second
 
+	// Create cluster and relay from etcd plugin
+	etcdNode := etcd.Node{Name: node.Name, Host: node.Host, EtcdClientPort: node.EtcdClientPort, EtcdPeerPort: node.EtcdPeerPort, RelayPort: node.RelayPort, APIPort: node.APIPort}
+	etcdConfig := etcd.Config{}
+	for _, n := range clusterConfig.Nodes {
+		etcdConfig.AddNode(etcd.Node{Name: n.Name, Host: n.Host, EtcdClientPort: n.EtcdClientPort, EtcdPeerPort: n.EtcdPeerPort, RelayPort: n.RelayPort, APIPort: n.APIPort})
+	}
+	clusterNode := etcd.CreateEtcdServer(etcdNode, etcdConfig, etcdDataPath)
+	clusterNode.Start()
+	clusterNode.WaitToStart()
+	relayServer := etcd.CreateRelayServer(etcdNode, etcdConfig)
+
 	srv := server.CreateServer(
 		db,
 		ServerPort,
@@ -72,8 +84,8 @@ func startServer(
 		TLSKey,
 		TLSCert,
 		node,
-		clusterConfig,
-		etcdDataPath,
+		clusterNode,
+		relayServer,
 		GeneratorCheckerPeriod,
 		CronCheckerPeriod,
 		ExclusiveAssign,
