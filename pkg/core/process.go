@@ -288,12 +288,10 @@ func (process *Process) SetAttributes(attributes []Attribute) {
 	process.Attributes = attributes
 }
 
-// -50000 - 50000
+// Priority is MinPriority - MaxPriority. See ComputePriorityTime in priority.go.
 func (process *Process) SetSubmissionTime(submissionTime time.Time) {
 	process.SubmissionTime = submissionTime
-	var dt int64
-	dt = -1000000000 * 60 * 60 * 24
-	process.PriorityTime = int64(process.FunctionSpec.Priority)*dt + submissionTime.UnixNano()
+	process.PriorityTime = ComputePriorityTime(process.FunctionSpec.Priority, submissionTime)
 }
 
 func (process *Process) SetStartTime(startTime time.Time) {

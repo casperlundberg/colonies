@@ -68,6 +68,34 @@ type FunctionSpec struct {
 	Filesystem  Filesystem             `json:"fs"`
 	Env      map[string]string `json:"env"`
 	Channels []string          `json:"channels,omitempty"`
+
+	// Bounds for priority-channel updates. Nil means unset: the floor then
+	// defaults to MinPriority and the ceiling to the priority the process was
+	// submitted with, so an unconfigured process can be decayed freely but never
+	// escalated above its original standing. Both are resolved and persisted when
+	// the process is added, and reported back on read.
+	//
+	// Deliberately not part of Equals: that compares the specification as
+	// submitted, and these are server-resolved.
+	PriorityFloor   *int `json:"priorityfloor,omitempty"`
+	PriorityCeiling *int `json:"priorityceiling,omitempty"`
+}
+
+// ResolvePriorityBounds returns the effective [floor, ceiling] for priority
+// updates. An unset floor is MinPriority; an unset ceiling is the priority the
+// spec carries, which at submission is the priority the process started at.
+func (funcSpec *FunctionSpec) ResolvePriorityBounds() (int, int) {
+	floor := MinPriority
+	if funcSpec.PriorityFloor != nil {
+		floor = *funcSpec.PriorityFloor
+	}
+
+	ceiling := funcSpec.Priority
+	if funcSpec.PriorityCeiling != nil {
+		ceiling = *funcSpec.PriorityCeiling
+	}
+
+	return floor, ceiling
 }
 
 func CreateEmptyFunctionSpec() *FunctionSpec {

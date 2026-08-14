@@ -32,7 +32,7 @@ func (db *PQDatabase) AddProcess(process *core.Process) error {
 	// Blueprint field removed from FunctionSpec - always write empty string for column
 	blueprintJSONStr := ""
 
-	sqlStatement := `INSERT INTO  ` + db.dbPrefix + `PROCESSES (PROCESS_ID, TARGET_COLONY_NAME, TARGET_EXECUTOR_NAMES, ASSIGNED_EXECUTOR_ID, STATE, IS_ASSIGNED, EXECUTOR_TYPE, SUBMISSION_TIME, START_TIME, END_TIME, WAIT_DEADLINE, EXEC_DEADLINE, ERRORS, RETRIES, NODENAME, FUNCNAME, ARGS, KWARGS, MAX_WAIT_TIME, MAX_EXEC_TIME, MAX_RETRIES, DEPENDENCIES, PRIORITY, PRIORITYTIME, WAIT_FOR_PARENTS, PARENTS, CHILDREN, PROCESSGRAPH_ID, INPUT, OUTPUT, LABEL, FS, NODES, CPU, PROCESSES, PROCESSES_PER_NODE, MEMORY, STORAGE, GPUNAME, GPUCOUNT, GPUMEM, WALLTIME, INITIATOR_ID, INITIATOR_NAME, BLUEPRINT, CHANNELS, LOCATION_NAME) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47)`
+	sqlStatement := `INSERT INTO  ` + db.dbPrefix + `PROCESSES (PROCESS_ID, TARGET_COLONY_NAME, TARGET_EXECUTOR_NAMES, ASSIGNED_EXECUTOR_ID, STATE, IS_ASSIGNED, EXECUTOR_TYPE, SUBMISSION_TIME, START_TIME, END_TIME, WAIT_DEADLINE, EXEC_DEADLINE, ERRORS, RETRIES, NODENAME, FUNCNAME, ARGS, KWARGS, MAX_WAIT_TIME, MAX_EXEC_TIME, MAX_RETRIES, DEPENDENCIES, PRIORITY, PRIORITYTIME, WAIT_FOR_PARENTS, PARENTS, CHILDREN, PROCESSGRAPH_ID, INPUT, OUTPUT, LABEL, FS, NODES, CPU, PROCESSES, PROCESSES_PER_NODE, MEMORY, STORAGE, GPUNAME, GPUCOUNT, GPUMEM, WALLTIME, INITIATOR_ID, INITIATOR_NAME, BLUEPRINT, CHANNELS, LOCATION_NAME, PRIORITY_FLOOR, PRIORITY_CEILING) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49)`
 
 	argsJSON, err := json.Marshal(process.FunctionSpec.Args)
 	if err != nil {
@@ -61,6 +61,18 @@ func (db *PQDatabase) AddProcess(process *core.Process) error {
 	process.SetSubmissionTime(submissionTime)
 	process.WaitDeadline = deadline
 
+	// Resolve the priority-channel bounds once, here, and write them back onto the
+	// spec so the in-memory process and the stored row agree.
+	priorityFloor, priorityCeiling := process.FunctionSpec.ResolvePriorityBounds()
+	if priorityFloor > priorityCeiling {
+		return errors.New("Failed to add process, priority floor " + strconv.Itoa(priorityFloor) + " is above priority ceiling " + strconv.Itoa(priorityCeiling))
+	}
+	if priorityFloor < core.MinPriority || priorityCeiling > core.MaxPriority {
+		return errors.New("Failed to add process, priority bounds [" + strconv.Itoa(priorityFloor) + ", " + strconv.Itoa(priorityCeiling) + "] fall outside the allowed range [" + strconv.Itoa(core.MinPriority) + ", " + strconv.Itoa(core.MaxPriority) + "]")
+	}
+	process.FunctionSpec.PriorityFloor = &priorityFloor
+	process.FunctionSpec.PriorityCeiling = &priorityCeiling
+
 	cpu, err := parsers.ConvertCPUToInt(process.FunctionSpec.Conditions.CPU)
 	if err != nil {
 		return err
@@ -81,7 +93,7 @@ func (db *PQDatabase) AddProcess(process *core.Process) error {
 		return err
 	}
 
-	_, err = db.postgresql.Exec(sqlStatement, process.ID, process.FunctionSpec.Conditions.ColonyName, pq.Array(targetExecutorNames), process.AssignedExecutorID, process.State, process.IsAssigned, process.FunctionSpec.Conditions.ExecutorType, submissionTime, time.Time{}, time.Time{}, deadline, process.ExecDeadline, pq.Array(process.Errors), 0, process.FunctionSpec.NodeName, process.FunctionSpec.FuncName, argsJSONStr, kwargsJSONStr, process.FunctionSpec.MaxWaitTime, process.FunctionSpec.MaxExecTime, process.FunctionSpec.MaxRetries, pq.Array(process.FunctionSpec.Conditions.Dependencies), process.FunctionSpec.Priority, process.PriorityTime, process.WaitForParents, pq.Array(process.Parents), pq.Array(process.Children), process.ProcessGraphID, inJSONStr, outJSONStr, process.FunctionSpec.Label, fsJSONStr, process.FunctionSpec.Conditions.Nodes, cpu, process.FunctionSpec.Conditions.Processes, process.FunctionSpec.Conditions.ProcessesPerNode, memory, storage, process.FunctionSpec.Conditions.GPU.Name, process.FunctionSpec.Conditions.GPU.Count, gpuMem, process.FunctionSpec.Conditions.WallTime, process.InitiatorID, process.InitiatorName, blueprintJSONStr, pq.Array(process.FunctionSpec.Channels), process.FunctionSpec.Conditions.LocationName)
+	_, err = db.postgresql.Exec(sqlStatement, process.ID, process.FunctionSpec.Conditions.ColonyName, pq.Array(targetExecutorNames), process.AssignedExecutorID, process.State, process.IsAssigned, process.FunctionSpec.Conditions.ExecutorType, submissionTime, time.Time{}, time.Time{}, deadline, process.ExecDeadline, pq.Array(process.Errors), 0, process.FunctionSpec.NodeName, process.FunctionSpec.FuncName, argsJSONStr, kwargsJSONStr, process.FunctionSpec.MaxWaitTime, process.FunctionSpec.MaxExecTime, process.FunctionSpec.MaxRetries, pq.Array(process.FunctionSpec.Conditions.Dependencies), process.FunctionSpec.Priority, process.PriorityTime, process.WaitForParents, pq.Array(process.Parents), pq.Array(process.Children), process.ProcessGraphID, inJSONStr, outJSONStr, process.FunctionSpec.Label, fsJSONStr, process.FunctionSpec.Conditions.Nodes, cpu, process.FunctionSpec.Conditions.Processes, process.FunctionSpec.Conditions.ProcessesPerNode, memory, storage, process.FunctionSpec.Conditions.GPU.Name, process.FunctionSpec.Conditions.GPU.Count, gpuMem, process.FunctionSpec.Conditions.WallTime, process.InitiatorID, process.InitiatorName, blueprintJSONStr, pq.Array(process.FunctionSpec.Channels), process.FunctionSpec.Conditions.LocationName, priorityFloor, priorityCeiling)
 	if err != nil {
 		return err
 	}
@@ -150,8 +162,10 @@ func (db *PQDatabase) parseProcesses(rows *sql.Rows) ([]*core.Process, error) {
 		var blueprintJSONStr sql.NullString
 		var channels []string
 		var locationName sql.NullString
+		var priorityFloor sql.NullInt64
+		var priorityCeiling sql.NullInt64
 
-		if err := rows.Scan(&processID, &targetColonyName, pq.Array(&targetExecutorNames), &assignedExecutorID, &state, &isAssigned, &executorType, &submissionTime, &startTime, &endTime, &waitDeadline, &execDeadline, pq.Array(&errs), &nodeName, &funcName, &argsJSONStr, &kwargsJSONStr, &maxWaitTime, &maxExecTime, &retries, &maxRetries, pq.Array(&dependencies), &priority, &priorityTime, &waitForParent, pq.Array(&parents), pq.Array(&children), &processGraphID, &inputJSONStr, &outputJSONStr, &label, &fsJSONStr, &nodes, &cpu, &processesCount, &processesPerNode, &memory, &storage, &gpuName, &gpuCount, &gpuMemory, &walltime, &initiatorID, &initiatorName, &blueprintJSONStr, pq.Array(&channels), &locationName); err != nil {
+		if err := rows.Scan(&processID, &targetColonyName, pq.Array(&targetExecutorNames), &assignedExecutorID, &state, &isAssigned, &executorType, &submissionTime, &startTime, &endTime, &waitDeadline, &execDeadline, pq.Array(&errs), &nodeName, &funcName, &argsJSONStr, &kwargsJSONStr, &maxWaitTime, &maxExecTime, &retries, &maxRetries, pq.Array(&dependencies), &priority, &priorityTime, &waitForParent, pq.Array(&parents), pq.Array(&children), &processGraphID, &inputJSONStr, &outputJSONStr, &label, &fsJSONStr, &nodes, &cpu, &processesCount, &processesPerNode, &memory, &storage, &gpuName, &gpuCount, &gpuMemory, &walltime, &initiatorID, &initiatorName, &blueprintJSONStr, pq.Array(&channels), &locationName, &priorityFloor, &priorityCeiling); err != nil {
 			return nil, err
 		}
 
@@ -228,6 +242,17 @@ func (db *PQDatabase) parseProcesses(rows *sql.Rows) ([]*core.Process, error) {
 		functionSpec.Conditions.WallTime = walltime
 		if locationName.Valid {
 			functionSpec.Conditions.LocationName = locationName.String
+		}
+
+		// Rows written before the priority channel existed carry no bounds; leave
+		// them unset so ResolvePriorityBounds supplies the defaults.
+		if priorityFloor.Valid {
+			floor := int(priorityFloor.Int64)
+			functionSpec.PriorityFloor = &floor
+		}
+		if priorityCeiling.Valid {
+			ceiling := int(priorityCeiling.Int64)
+			functionSpec.PriorityCeiling = &ceiling
 		}
 
 		fs := core.Filesystem{}

@@ -177,6 +177,9 @@ func (m *MockProcessDB) SetProcessState(processID string, state int) error      
 func (m *MockProcessDB) SetParents(processID string, parents []string) error         { return nil }
 func (m *MockProcessDB) SetChildren(processID string, children []string) error       { return nil }
 func (m *MockProcessDB) SetWaitForParents(processID string, waiting bool) error      { return nil }
+func (m *MockProcessDB) SetProcessPriorities(updates []core.PriorityUpdate) ([]core.PriorityUpdateResult, error) {
+	return []core.PriorityUpdateResult{}, nil
+}
 func (m *MockProcessDB) Assign(executorID string, process *core.Process) error       { return nil }
 func (m *MockProcessDB) SelectAndAssign(colonyName, executorID, executorName, executorType, executorLocation string, cpu, memory, storage int64, nodes, processes, processesPerNode, count int) (*core.Process, error) { return nil, nil }
 func (m *MockProcessDB) Unassign(process *core.Process) error                        { return nil }

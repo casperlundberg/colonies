@@ -56,6 +56,7 @@ func (db *DatabaseMock) MarkFailed(processID string, errs []string) error { retu
 func (db *DatabaseMock) MarkRunning(processID string, executorID string) error { return nil }
 func (db *DatabaseMock) SetWaitingTime(processID string) error { return nil }
 func (db *DatabaseMock) SetWaitForParents(processID string, waitForParents bool) error { return nil }
+func (db *DatabaseMock) SetProcessPriorities(updates []core.PriorityUpdate) ([]core.PriorityUpdateResult, error) { return []core.PriorityUpdateResult{}, nil }
 func (db *DatabaseMock) SetProcessState(processID string, state int) error { return nil }
 func (db *DatabaseMock) Assign(executorID string, colonyName string, cpu int64, memory int64) (*core.Process, error) { return nil, nil }
 func (db *DatabaseMock) Unassign(processID string) error { return nil }

@@ -345,6 +345,10 @@ func (m *MockProcessDB) SetWaitForParents(processID string, waitingForParent boo
 	return nil
 }
 
+func (m *MockProcessDB) SetProcessPriorities(updates []core.PriorityUpdate) ([]core.PriorityUpdateResult, error) {
+	return []core.PriorityUpdateResult{}, nil
+}
+
 func (m *MockProcessDB) Assign(executorID string, process *core.Process) error {
 	return nil
 }
