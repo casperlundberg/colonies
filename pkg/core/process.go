@@ -288,7 +288,7 @@ func (process *Process) SetAttributes(attributes []Attribute) {
 	process.Attributes = attributes
 }
 
-// Priority is MinPriority - MaxPriority. See ComputePriorityTime in priority.go.
+// Priority is constants.MIN_PRIORITY - MAX_PRIORITY. See ComputePriorityTime in priority.go.
 func (process *Process) SetSubmissionTime(submissionTime time.Time) {
 	process.SubmissionTime = submissionTime
 	process.PriorityTime = ComputePriorityTime(process.FunctionSpec.Priority, submissionTime)

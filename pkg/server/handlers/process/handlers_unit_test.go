@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/colonyos/colonies/pkg/backends"
+	"github.com/colonyos/colonies/pkg/constants"
 	"github.com/colonyos/colonies/pkg/core"
 	"github.com/colonyos/colonies/pkg/database"
 	"github.com/colonyos/colonies/pkg/rpc"
@@ -105,6 +106,9 @@ type MockProcessDB struct {
 	returnNilByID        bool
 	setOutputErr         error
 	removeAllProcessesErr error
+	setPrioritiesColony  string
+	setPrioritiesUpdates []core.PriorityUpdate
+	setPrioritiesErr     error
 }
 
 func (m *MockProcessDB) AddProcess(process *core.Process) error { return nil }
@@ -188,8 +192,19 @@ func (m *MockProcessDB) SetChildren(processID string, children []string) error {
 func (m *MockProcessDB) SetWaitForParents(processID string, waitingForParent bool) error {
 	return nil
 }
-func (m *MockProcessDB) SetProcessPriorities(updates []core.PriorityUpdate) ([]core.PriorityUpdateResult, error) {
-	return []core.PriorityUpdateResult{}, nil
+func (m *MockProcessDB) SetProcessPriorities(colonyName string, updates []core.PriorityUpdate) ([]core.PriorityUpdateResult, error) {
+	m.setPrioritiesColony = colonyName
+	m.setPrioritiesUpdates = updates
+	if m.setPrioritiesErr != nil {
+		return nil, m.setPrioritiesErr
+	}
+
+	results := make([]core.PriorityUpdateResult, 0, len(updates))
+	for _, update := range updates {
+		results = append(results, core.PriorityUpdateResult{ProcessID: update.ProcessID, Outcome: core.PriorityUpdated, Priority: update.Priority})
+	}
+
+	return results, nil
 }
 
 func (m *MockProcessDB) Assign(executorID string, process *core.Process) error {
@@ -1371,4 +1386,122 @@ func TestRegisterHandlers_DuplicateError(t *testing.T) {
 	// Try to register again
 	err = handlers.RegisterHandlers(handlerRegistry)
 	assert.NotNil(t, err)
+}
+
+// HandleSetProcessPriorities tests -- the priority channel's server surface.
+
+func TestHandleSetProcessPriorities_Success(t *testing.T) {
+	mockServer := createMockServer()
+	handlers := NewHandlers(mockServer)
+
+	updates := []core.PriorityUpdate{
+		{ProcessID: "process-123", Priority: 0},
+		{ProcessID: "process-456", Priority: 25},
+	}
+	msg := rpc.CreateSetProcessPrioritiesMsg("test-colony", updates)
+	jsonStr, _ := msg.ToJSON()
+
+	ctx := &MockContext{}
+	handlers.HandleSetProcessPriorities(ctx, "executor-123", rpc.SetProcessPrioritiesPayloadType, jsonStr)
+
+	assert.Equal(t, 0, mockServer.httpErrorCode)
+
+	// The colony scope must reach the database, not stop at the membership check.
+	assert.Equal(t, "test-colony", mockServer.processDB.setPrioritiesColony)
+	assert.Equal(t, updates, mockServer.processDB.setPrioritiesUpdates)
+
+	results, err := core.ConvertJSONToPriorityUpdateResults(mockServer.replyPayload)
+	assert.Nil(t, err)
+	assert.Len(t, results, 2)
+	assert.Equal(t, "process-123", results[0].ProcessID)
+	assert.Equal(t, core.PriorityUpdated, results[0].Outcome)
+	assert.Equal(t, 25, results[1].Priority)
+}
+
+func TestHandleSetProcessPriorities_InvalidJSON(t *testing.T) {
+	mockServer := createMockServer()
+	handlers := NewHandlers(mockServer)
+
+	ctx := &MockContext{}
+	handlers.HandleSetProcessPriorities(ctx, "executor-123", rpc.SetProcessPrioritiesPayloadType, "invalid json")
+
+	assert.Equal(t, http.StatusBadRequest, mockServer.httpErrorCode)
+}
+
+func TestHandleSetProcessPriorities_MsgTypeMismatch(t *testing.T) {
+	mockServer := createMockServer()
+	handlers := NewHandlers(mockServer)
+
+	msg := rpc.CreateSetProcessPrioritiesMsg("test-colony", []core.PriorityUpdate{{ProcessID: "process-123", Priority: 0}})
+	jsonStr, _ := msg.ToJSON()
+
+	ctx := &MockContext{}
+	handlers.HandleSetProcessPriorities(ctx, "executor-123", "wrongtype", jsonStr)
+
+	assert.Equal(t, http.StatusBadRequest, mockServer.httpErrorCode)
+	assert.Equal(t, "", mockServer.processDB.setPrioritiesColony)
+}
+
+func TestHandleSetProcessPriorities_EmptyColonyName(t *testing.T) {
+	mockServer := createMockServer()
+	handlers := NewHandlers(mockServer)
+
+	// Without a colony there is nothing to check membership against, so the
+	// request cannot be authorised at all.
+	msg := rpc.CreateSetProcessPrioritiesMsg("", []core.PriorityUpdate{{ProcessID: "process-123", Priority: 0}})
+	jsonStr, _ := msg.ToJSON()
+
+	ctx := &MockContext{}
+	handlers.HandleSetProcessPriorities(ctx, "executor-123", rpc.SetProcessPrioritiesPayloadType, jsonStr)
+
+	assert.Equal(t, http.StatusBadRequest, mockServer.httpErrorCode)
+	assert.Equal(t, "", mockServer.processDB.setPrioritiesColony)
+}
+
+func TestHandleSetProcessPriorities_AuthError(t *testing.T) {
+	mockServer := createMockServer()
+	mockServer.validator.requireMembershipErr = errors.New("not a member")
+	handlers := NewHandlers(mockServer)
+
+	msg := rpc.CreateSetProcessPrioritiesMsg("test-colony", []core.PriorityUpdate{{ProcessID: "process-123", Priority: 0}})
+	jsonStr, _ := msg.ToJSON()
+
+	ctx := &MockContext{}
+	handlers.HandleSetProcessPriorities(ctx, "executor-123", rpc.SetProcessPrioritiesPayloadType, jsonStr)
+
+	assert.Equal(t, http.StatusForbidden, mockServer.httpErrorCode)
+	assert.Equal(t, "", mockServer.processDB.setPrioritiesColony, "a non-member must not reach the database")
+}
+
+func TestHandleSetProcessPriorities_PriorityOutOfAllowedRange(t *testing.T) {
+	mockServer := createMockServer()
+	handlers := NewHandlers(mockServer)
+
+	// Per-process bounds are the database's business, but the global range is the
+	// same one submission is checked against, so reject it before the write.
+	msg := rpc.CreateSetProcessPrioritiesMsg("test-colony", []core.PriorityUpdate{
+		{ProcessID: "process-123", Priority: 0},
+		{ProcessID: "process-456", Priority: constants.MAX_PRIORITY + 1},
+	})
+	jsonStr, _ := msg.ToJSON()
+
+	ctx := &MockContext{}
+	handlers.HandleSetProcessPriorities(ctx, "executor-123", rpc.SetProcessPrioritiesPayloadType, jsonStr)
+
+	assert.Equal(t, http.StatusBadRequest, mockServer.httpErrorCode)
+	assert.Equal(t, "", mockServer.processDB.setPrioritiesColony, "the whole batch is refused, not partly applied")
+}
+
+func TestHandleSetProcessPriorities_DBError(t *testing.T) {
+	mockServer := createMockServer()
+	mockServer.processDB.setPrioritiesErr = errors.New("db error")
+	handlers := NewHandlers(mockServer)
+
+	msg := rpc.CreateSetProcessPrioritiesMsg("test-colony", []core.PriorityUpdate{{ProcessID: "process-123", Priority: 0}})
+	jsonStr, _ := msg.ToJSON()
+
+	ctx := &MockContext{}
+	handlers.HandleSetProcessPriorities(ctx, "executor-123", rpc.SetProcessPrioritiesPayloadType, jsonStr)
+
+	assert.Equal(t, http.StatusBadRequest, mockServer.httpErrorCode)
 }

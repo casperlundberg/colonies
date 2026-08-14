@@ -170,6 +170,9 @@ func (h *Handlers) RegisterHandlers(handlerRegistry *registry.HandlerRegistry) e
 	if err := handlerRegistry.Register(rpc.SetOutputPayloadType, h.HandleSetOutput); err != nil {
 		return err
 	}
+	if err := handlerRegistry.Register(rpc.SetProcessPrioritiesPayloadType, h.HandleSetProcessPriorities); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -779,6 +782,69 @@ func (h *Handlers) HandleSetOutput(c backends.Context, recoveredID string, paylo
 	log.WithFields(log.Fields{"ProcessId": process.ID}).Debug("Set output")
 
 	h.server.SendEmptyHTTPReply(c, payloadType)
+}
+
+// HandleSetProcessPriorities is the priority channel: one bulk, bounded update of
+// the priority of WAITING processes.
+//
+// Authorisation is membership of the colony the batch names, which is the same
+// rule HandleRemoveProcess uses -- an approved member may already remove any
+// process in its colony, and re-prioritising one is strictly weaker than that.
+// The database enforces the colony scope in the same statement, so naming a
+// colony the caller belongs to cannot reach processes in another one.
+func (h *Handlers) HandleSetProcessPriorities(c backends.Context, recoveredID string, payloadType string, jsonString string) {
+	msg, err := rpc.CreateSetProcessPrioritiesMsgFromJSON(jsonString)
+	if err != nil {
+		// Return unconditionally: msg is nil here, so falling through would
+		// dereference it.
+		h.server.HandleHTTPError(c, errors.New("Failed to set process priorities, invalid JSON"), http.StatusBadRequest)
+		return
+	}
+
+	if msg.MsgType != payloadType {
+		h.server.HandleHTTPError(c, errors.New("Failed to set process priorities, msg.MsgType does not match payloadType"), http.StatusBadRequest)
+		return
+	}
+
+	if msg.ColonyName == "" {
+		h.server.HandleHTTPError(c, errors.New("Failed to set process priorities, msg.ColonyName is empty"), http.StatusBadRequest)
+		return
+	}
+
+	err = h.server.Validator().RequireMembership(recoveredID, msg.ColonyName, true)
+	if h.server.HandleHTTPError(c, err, http.StatusForbidden) {
+		return
+	}
+
+	for _, update := range msg.Updates {
+		if update.Priority < constants.MIN_PRIORITY || update.Priority > constants.MAX_PRIORITY {
+			errmsg := "Failed to set process priorities, priority outside range [" + strconv.Itoa(constants.MIN_PRIORITY) + ", " + strconv.Itoa(constants.MAX_PRIORITY) + "]"
+			h.server.HandleHTTPError(c, errors.New(errmsg), http.StatusBadRequest)
+			return
+		}
+	}
+
+	results, err := h.server.ProcessDB().SetProcessPriorities(msg.ColonyName, msg.Updates)
+	if h.server.HandleHTTPError(c, err, http.StatusBadRequest) {
+		log.WithFields(log.Fields{"Error": err}).Debug("Failed to set process priorities")
+		return
+	}
+
+	replyString, err := core.ConvertPriorityUpdateResultsToJSON(results)
+	if h.server.HandleHTTPError(c, err, http.StatusInternalServerError) {
+		return
+	}
+
+	updated := 0
+	for _, result := range results {
+		if result.Outcome == core.PriorityUpdated {
+			updated++
+		}
+	}
+
+	log.WithFields(log.Fields{"ColonyName": msg.ColonyName, "Requested": len(msg.Updates), "Updated": updated}).Debug("Set process priorities")
+
+	h.server.SendHTTPReply(c, payloadType, replyString)
 }
 
 func (h *Handlers) HandleCloseSuccessful(c backends.Context, recoveredID string, payloadType string, jsonString string) {

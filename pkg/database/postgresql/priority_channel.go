@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/colonyos/colonies/pkg/constants"
 	"github.com/colonyos/colonies/pkg/core"
 	"github.com/lib/pq"
 )
@@ -20,9 +21,11 @@ import (
 //
 // PRIORITYTIME is updated as a delta rather than recomputed from
 // SUBMISSION_TIME. That keeps the arithmetic exact: SUBMISSION_TIME is a
-// TIMESTAMPTZ (microsecond resolution) while the key was built from
-// UnixNano, so recomputing would silently shift the key by up to 999 ns and
-// could reorder processes submitted within the same microsecond.
+// TIMESTAMPTZ, which rounds to the nearest microsecond, while the key was built
+// from UnixNano, so recomputing would shift the key by up to a microsecond in
+// either direction and could reorder processes submitted close together. The
+// delta form also survives ResetProcess, which rewrites SUBMISSION_TIME without
+// touching PRIORITYTIME.
 
 type priorityRow struct {
 	state    int
@@ -31,7 +34,10 @@ type priorityRow struct {
 	ceiling  int
 }
 
-func (db *PQDatabase) SetProcessPriorities(updates []core.PriorityUpdate) ([]core.PriorityUpdateResult, error) {
+func (db *PQDatabase) SetProcessPriorities(colonyName string, updates []core.PriorityUpdate) ([]core.PriorityUpdateResult, error) {
+	if colonyName == "" {
+		return nil, errors.New("Failed to set process priorities, colony name is empty")
+	}
 	if len(updates) == 0 {
 		return []core.PriorityUpdateResult{}, nil
 	}
@@ -55,7 +61,7 @@ func (db *PQDatabase) SetProcessPriorities(updates []core.PriorityUpdate) ([]cor
 	}
 	defer tx.Rollback()
 
-	landed, err := db.applyPriorityUpdates(tx, updates)
+	landed, err := db.applyPriorityUpdates(tx, colonyName, updates)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +73,7 @@ func (db *PQDatabase) SetProcessPriorities(updates []core.PriorityUpdate) ([]cor
 		}
 	}
 
-	rejected, err := db.selectPriorityRows(tx, missing)
+	rejected, err := db.selectPriorityRows(tx, colonyName, missing)
 	if err != nil {
 		return nil, err
 	}
@@ -107,15 +113,15 @@ func (db *PQDatabase) SetProcessPriorities(updates []core.PriorityUpdate) ([]cor
 
 // applyPriorityUpdates runs the whole batch as one statement and returns the
 // effective priority of every process it actually wrote.
-func (db *PQDatabase) applyPriorityUpdates(tx *sql.Tx, updates []core.PriorityUpdate) (map[string]int, error) {
+func (db *PQDatabase) applyPriorityUpdates(tx *sql.Tx, colonyName string, updates []core.PriorityUpdate) (map[string]int, error) {
 	// $1 is the (negative) priority-time unit, $2 the WAITING state, $3 the
-	// default floor; the batch values start at $4.
-	args := make([]interface{}, 0, 3+2*len(updates))
-	args = append(args, core.PriorityTimeUnit, core.WAITING, core.MinPriority)
+	// default floor, $4 the colony; the batch values start at $5.
+	args := make([]interface{}, 0, 4+2*len(updates))
+	args = append(args, core.PriorityTimeUnit, core.WAITING, constants.MIN_PRIORITY, colonyName)
 
 	values := make([]string, 0, len(updates))
 	for i, update := range updates {
-		values = append(values, "($"+strconv.Itoa(4+2*i)+"::text, $"+strconv.Itoa(5+2*i)+"::integer)")
+		values = append(values, "($"+strconv.Itoa(5+2*i)+"::text, $"+strconv.Itoa(6+2*i)+"::integer)")
 		args = append(args, update.ProcessID, update.Priority)
 	}
 
@@ -125,6 +131,7 @@ func (db *PQDatabase) applyPriorityUpdates(tx *sql.Tx, updates []core.PriorityUp
 	  FROM (VALUES ` + strings.Join(values, ", ") + `) AS v(process_id, priority)
 	 WHERE p.PROCESS_ID = v.process_id
 	   AND p.STATE = $2
+	   AND p.TARGET_COLONY_NAME = $4
 	   AND v.priority BETWEEN COALESCE(p.PRIORITY_FLOOR, $3) AND COALESCE(p.PRIORITY_CEILING, p.PRIORITY)
 	RETURNING p.PROCESS_ID, p.PRIORITY`
 
@@ -151,15 +158,17 @@ func (db *PQDatabase) applyPriorityUpdates(tx *sql.Tx, updates []core.PriorityUp
 }
 
 // selectPriorityRows reads the state and effective bounds of the processes the
-// update did not write, so each miss can be told apart.
-func (db *PQDatabase) selectPriorityRows(tx *sql.Tx, processIDs []string) (map[string]priorityRow, error) {
+// update did not write, so each miss can be told apart. Scoped to the colony as
+// well, so a process outside it is reported as not_found rather than having its
+// state disclosed.
+func (db *PQDatabase) selectPriorityRows(tx *sql.Tx, colonyName string, processIDs []string) (map[string]priorityRow, error) {
 	found := make(map[string]priorityRow)
 	if len(processIDs) == 0 {
 		return found, nil
 	}
 
-	sqlStatement := `SELECT PROCESS_ID, STATE, PRIORITY, COALESCE(PRIORITY_FLOOR, $1), COALESCE(PRIORITY_CEILING, PRIORITY) FROM ` + db.dbPrefix + `PROCESSES WHERE PROCESS_ID = ANY($2)`
-	rows, err := tx.Query(sqlStatement, core.MinPriority, pq.Array(processIDs))
+	sqlStatement := `SELECT PROCESS_ID, STATE, PRIORITY, COALESCE(PRIORITY_FLOOR, $1), COALESCE(PRIORITY_CEILING, PRIORITY) FROM ` + db.dbPrefix + `PROCESSES WHERE PROCESS_ID = ANY($2) AND TARGET_COLONY_NAME = $3`
+	rows, err := tx.Query(sqlStatement, constants.MIN_PRIORITY, pq.Array(processIDs), colonyName)
 	if err != nil {
 		return nil, err
 	}

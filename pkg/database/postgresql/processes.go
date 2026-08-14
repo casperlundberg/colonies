@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/colonyos/colonies/pkg/constants"
 	"github.com/colonyos/colonies/pkg/core"
 	"github.com/colonyos/colonies/pkg/parsers"
 	"github.com/lib/pq"
@@ -67,8 +68,8 @@ func (db *PQDatabase) AddProcess(process *core.Process) error {
 	if priorityFloor > priorityCeiling {
 		return errors.New("Failed to add process, priority floor " + strconv.Itoa(priorityFloor) + " is above priority ceiling " + strconv.Itoa(priorityCeiling))
 	}
-	if priorityFloor < core.MinPriority || priorityCeiling > core.MaxPriority {
-		return errors.New("Failed to add process, priority bounds [" + strconv.Itoa(priorityFloor) + ", " + strconv.Itoa(priorityCeiling) + "] fall outside the allowed range [" + strconv.Itoa(core.MinPriority) + ", " + strconv.Itoa(core.MaxPriority) + "]")
+	if priorityFloor < constants.MIN_PRIORITY || priorityCeiling > constants.MAX_PRIORITY {
+		return errors.New("Failed to add process, priority bounds [" + strconv.Itoa(priorityFloor) + ", " + strconv.Itoa(priorityCeiling) + "] fall outside the allowed range [" + strconv.Itoa(constants.MIN_PRIORITY) + ", " + strconv.Itoa(constants.MAX_PRIORITY) + "]")
 	}
 	process.FunctionSpec.PriorityFloor = &priorityFloor
 	process.FunctionSpec.PriorityCeiling = &priorityCeiling

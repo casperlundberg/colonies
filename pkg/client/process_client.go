@@ -243,3 +243,26 @@ func (client *ColoniesClient) SetOutput(processID string, output []interface{}, 
 	return nil
 }
 
+// SetProcessPriorities is the priority channel: one bulk, bounded update of the
+// priority of WAITING processes in a colony. The signature is bulk-first on
+// purpose -- an application decays in batches per decision cycle, and a per-job
+// convenience wrapper invites accidental N round-trips.
+//
+// The reply carries one result per update, in request order, each with an
+// outcome of updated / not_waiting / not_found / rejected_out_of_bounds. A
+// process that could not be moved is reported, not an error.
+func (client *ColoniesClient) SetProcessPriorities(colonyName string, updates []core.PriorityUpdate, prvKey string) ([]core.PriorityUpdateResult, error) {
+	msg := rpc.CreateSetProcessPrioritiesMsg(colonyName, updates)
+	jsonString, err := msg.ToJSON()
+	if err != nil {
+		return nil, err
+	}
+
+	respBodyString, err := client.sendMessage(rpc.SetProcessPrioritiesPayloadType, jsonString, prvKey, false, context.TODO())
+	if err != nil {
+		return nil, err
+	}
+
+	return core.ConvertJSONToPriorityUpdateResults(respBodyString)
+}
+

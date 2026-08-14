@@ -340,7 +340,7 @@ func (db *DatabaseMock) SetWaitForParents(processID string, waitForParent bool) 
 	if db.ReturnError == "SetWaitForParents" { return errors.New("mock error") }
 	return nil
 }
-func (db *DatabaseMock) SetProcessPriorities(updates []core.PriorityUpdate) ([]core.PriorityUpdateResult, error) {
+func (db *DatabaseMock) SetProcessPriorities(colonyName string, updates []core.PriorityUpdate) ([]core.PriorityUpdateResult, error) {
 	if db.ReturnError == "SetProcessPriorities" { return nil, errors.New("mock error") }
 	return []core.PriorityUpdateResult{}, nil
 }

@@ -44,7 +44,7 @@ func TestSetProcessPrioritiesReordersWaiting(t *testing.T) {
 	before, err := db.GetProcessByID(high.ID)
 	assert.Nil(t, err)
 
-	results, err := db.SetProcessPriorities([]core.PriorityUpdate{
+	results, err := db.SetProcessPriorities(colony.Name, []core.PriorityUpdate{
 		{ProcessID: high.ID, Priority: 0},
 	})
 	assert.Nil(t, err)
@@ -73,10 +73,10 @@ func TestSetProcessPrioritiesEscalates(t *testing.T) {
 
 	// Decay first, then bring it back up: the channel is bidirectional but
 	// bounded by the submission priority, so 25 must be reachable again.
-	_, err = db.SetProcessPriorities([]core.PriorityUpdate{{ProcessID: process.ID, Priority: 0}})
+	_, err = db.SetProcessPriorities(colony.Name, []core.PriorityUpdate{{ProcessID: process.ID, Priority: 0}})
 	assert.Nil(t, err)
 
-	results, err := db.SetProcessPriorities([]core.PriorityUpdate{
+	results, err := db.SetProcessPriorities(colony.Name, []core.PriorityUpdate{
 		{ProcessID: process.ID, Priority: 25},
 	})
 	assert.Nil(t, err)
@@ -98,7 +98,7 @@ func TestSetProcessPrioritiesRejectsAboveCeiling(t *testing.T) {
 	assert.Nil(t, db.AddProcess(process))
 
 	// Nothing may be escalated above the priority it was submitted with.
-	results, err := db.SetProcessPriorities([]core.PriorityUpdate{
+	results, err := db.SetProcessPriorities(colony.Name, []core.PriorityUpdate{
 		{ProcessID: process.ID, Priority: 400},
 	})
 	assert.Nil(t, err)
@@ -123,7 +123,7 @@ func TestSetProcessPrioritiesIgnoresRunning(t *testing.T) {
 	before, err := db.GetProcessByID(process.ID)
 	assert.Nil(t, err)
 
-	results, err := db.SetProcessPriorities([]core.PriorityUpdate{
+	results, err := db.SetProcessPriorities(colony.Name, []core.PriorityUpdate{
 		{ProcessID: process.ID, Priority: 0},
 	})
 	assert.Nil(t, err)
@@ -141,7 +141,7 @@ func TestSetProcessPrioritiesUnknownID(t *testing.T) {
 	assert.Nil(t, err)
 	defer db.Close()
 
-	results, err := db.SetProcessPriorities([]core.PriorityUpdate{
+	results, err := db.SetProcessPriorities("test_colony_name", []core.PriorityUpdate{
 		{ProcessID: core.GenerateRandomID(), Priority: 0},
 	})
 	assert.Nil(t, err, "an unknown id is a reported outcome, not an error")
@@ -167,7 +167,7 @@ func TestSetProcessPrioritiesBulkPreservesFIFOWithinTier(t *testing.T) {
 	for _, id := range ids {
 		updates = append(updates, core.PriorityUpdate{ProcessID: id, Priority: 0})
 	}
-	results, err := db.SetProcessPriorities(updates)
+	results, err := db.SetProcessPriorities(colony.Name, updates)
 	assert.Nil(t, err)
 	assert.Len(t, results, 3)
 

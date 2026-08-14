@@ -34,8 +34,9 @@ type ProcessDatabase interface {
 	SetChildren(processID string, children []string) error
 	SetWaitForParents(processID string, waitingForParent bool) error
 	// SetProcessPriorities updates the priority of WAITING processes in one
-	// transaction. Returns the outcome per process id, in the order given.
-	SetProcessPriorities(updates []core.PriorityUpdate) ([]core.PriorityUpdateResult, error)
+	// transaction, scoped to a colony like the RemoveAll*ByColonyName family.
+	// Returns the outcome per process id, in the order given.
+	SetProcessPriorities(colonyName string, updates []core.PriorityUpdate) ([]core.PriorityUpdateResult, error)
 	Assign(executorID string, process *core.Process) error
 	SelectAndAssign(colonyName string, executorID string, executorName string, executorType string, executorLocation string, cpu int64, memory int64, storage int64, nodes int, processes int, processesPerNode int, count int) (*core.Process, error)
 	Unassign(process *core.Process) error

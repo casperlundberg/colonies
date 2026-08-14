@@ -62,6 +62,8 @@ var Location string
 var ColonyPrvKey string
 var ColonyName string
 var ProcessID string
+var Priority int
+var PriorityUpdatesFile string
 var Key string
 var Value string
 var AttributeID string

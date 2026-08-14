@@ -494,3 +494,36 @@ func printProcessesTableWithClient(processes []*core.Process, mode int, client *
 
 	t.Render()
 }
+
+// printPriorityUpdateResultsTable renders the per-process outcome of a priority
+// channel write. Outcomes are colour-coded because the interesting case is the
+// mixed batch: a decay pass that reports mostly not_waiting has arrived too late
+// to matter.
+func printPriorityUpdateResultsTable(results []core.PriorityUpdateResult) {
+	t, theme := createTable(0)
+
+	var cols = []table.Column{
+		{ID: "processid", Name: "ProcessID", SortIndex: 1},
+		{ID: "outcome", Name: "Outcome", SortIndex: 2},
+		{ID: "priority", Name: "Priority", SortIndex: 3},
+	}
+	t.SetCols(cols)
+
+	for _, result := range results {
+		outcomeColor := theme.ColorRed
+		if result.Outcome == core.PriorityUpdated {
+			outcomeColor = theme.ColorGreen
+		} else if result.Outcome == core.PriorityNotWaiting {
+			outcomeColor = theme.ColorYellow
+		}
+
+		row := []interface{}{
+			termenv.String(result.ProcessID).Foreground(theme.ColorGray),
+			termenv.String(string(result.Outcome)).Foreground(outcomeColor),
+			termenv.String(strconv.Itoa(result.Priority)).Foreground(theme.ColorMagenta),
+		}
+		t.AddRow(row)
+	}
+
+	t.Render()
+}

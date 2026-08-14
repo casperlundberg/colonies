@@ -1,11 +1,8 @@
 package core
 
-import "time"
-
-// Priority bounds accepted at submission and by the priority channel.
-const (
-	MinPriority int = -50000
-	MaxPriority int = 50000
+import (
+	"encoding/json"
+	"time"
 )
 
 // PriorityTimeUnit is the queue displacement of one priority unit, in
@@ -43,4 +40,24 @@ type PriorityUpdateResult struct {
 	ProcessID string                `json:"processid"`
 	Outcome   PriorityUpdateOutcome `json:"outcome"`
 	Priority  int                   `json:"priority"` // effective value after the call
+}
+
+func ConvertPriorityUpdateResultsToJSON(results []PriorityUpdateResult) (string, error) {
+	jsonBytes, err := json.Marshal(results)
+	if err != nil {
+		return "", err
+	}
+
+	return string(jsonBytes), nil
+}
+
+func ConvertJSONToPriorityUpdateResults(jsonString string) ([]PriorityUpdateResult, error) {
+	var results []PriorityUpdateResult
+
+	err := json.Unmarshal([]byte(jsonString), &results)
+	if err != nil {
+		return nil, err
+	}
+
+	return results, nil
 }

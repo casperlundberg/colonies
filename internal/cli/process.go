@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -24,6 +25,7 @@ func init() {
 	processCmd.AddCommand(assignProcessCmd)
 	processCmd.AddCommand(closeSuccessfulCmd)
 	processCmd.AddCommand(closeFailedCmd)
+	processCmd.AddCommand(setPriorityCmd)
 	processCmd.AddCommand(pauseAssignmentsCmd)
 	processCmd.AddCommand(resumeAssignmentsCmd)
 	processCmd.AddCommand(statusAssignmentsCmd)
@@ -88,6 +90,13 @@ func init() {
 	closeFailedCmd.Flags().StringVarP(&PrvKey, "prvkey", "", "", "Private key")
 	closeFailedCmd.Flags().StringVarP(&ProcessID, "processid", "p", "", "Process Id")
 	closeFailedCmd.MarkFlagRequired("processid")
+
+	setPriorityCmd.Flags().StringVarP(&PrvKey, "prvkey", "", "", "Private key")
+	setPriorityCmd.Flags().StringVarP(&ColonyName, "colonyname", "", "", "Colony name")
+	setPriorityCmd.Flags().StringVarP(&ProcessID, "processid", "p", "", "Process Id")
+	setPriorityCmd.Flags().IntVarP(&Priority, "priority", "", 0, "New priority")
+	setPriorityCmd.Flags().StringVarP(&PriorityUpdatesFile, "from-file", "", "", "JSON file of updates: [{\"processid\": \"...\", \"priority\": 0}]")
+	setPriorityCmd.Flags().BoolVarP(&JSON, "json", "", false, "Print JSON instead of tables")
 
 	pauseAssignmentsCmd.Flags().StringVarP(&ColonyName, "colonyname", "", "", "Colony name")
 	pauseAssignmentsCmd.Flags().StringVarP(&PrvKey, "prvkey", "", "", "Private key")
@@ -431,6 +440,64 @@ var closeFailedCmd = &cobra.Command{
 
 		log.WithFields(log.Fields{"ProcessId": process.ID}).Info("Process closed as failed")
 	},
+}
+
+// setPriorityCmd exists so the priority channel can be driven, and debugged,
+// without the application in the loop.
+var setPriorityCmd = &cobra.Command{
+	Use:   "setpriority",
+	Short: "Set the priority of waiting processes",
+	Long:  "Set the priority of waiting processes, either one by id or a batch from a JSON file",
+	Run: func(cmd *cobra.Command, args []string) {
+		client := setup()
+
+		updates, err := readPriorityUpdates()
+		CheckError(err)
+
+		results, err := client.SetProcessPriorities(ColonyName, updates, PrvKey)
+		CheckError(err)
+
+		if JSON {
+			jsonString, err := core.ConvertPriorityUpdateResultsToJSON(results)
+			CheckError(err)
+			fmt.Println(jsonString)
+			return
+		}
+
+		printPriorityUpdateResultsTable(results)
+	},
+}
+
+// readPriorityUpdates builds the batch from either --from-file or the single
+// --processid/--priority pair. Exactly one of the two forms must be given; the
+// batch form is the one the application uses, so it is not an afterthought here.
+func readPriorityUpdates() ([]core.PriorityUpdate, error) {
+	if PriorityUpdatesFile != "" {
+		if ProcessID != "" {
+			return nil, errors.New("Specify either --from-file or --processid, not both")
+		}
+
+		jsonBytes, err := os.ReadFile(PriorityUpdatesFile)
+		if err != nil {
+			return nil, err
+		}
+
+		var updates []core.PriorityUpdate
+		if err := json.Unmarshal(jsonBytes, &updates); err != nil {
+			return nil, err
+		}
+		if len(updates) == 0 {
+			return nil, errors.New("No updates in " + PriorityUpdatesFile)
+		}
+
+		return updates, nil
+	}
+
+	if ProcessID == "" {
+		return nil, errors.New("Specify --processid with --priority, or a batch with --from-file")
+	}
+
+	return []core.PriorityUpdate{{ProcessID: ProcessID, Priority: Priority}}, nil
 }
 
 var pauseAssignmentsCmd = &cobra.Command{

@@ -345,7 +345,7 @@ func (m *MockProcessDB) SetWaitForParents(processID string, waitingForParent boo
 	return nil
 }
 
-func (m *MockProcessDB) SetProcessPriorities(updates []core.PriorityUpdate) ([]core.PriorityUpdateResult, error) {
+func (m *MockProcessDB) SetProcessPriorities(colonyName string, updates []core.PriorityUpdate) ([]core.PriorityUpdateResult, error) {
 	return []core.PriorityUpdateResult{}, nil
 }
 

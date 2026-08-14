@@ -2,6 +2,8 @@ package core
 
 import (
 	"encoding/json"
+
+	"github.com/colonyos/colonies/pkg/constants"
 )
 
 type Filesystem struct {
@@ -66,14 +68,14 @@ type FunctionSpec struct {
 	Conditions  Conditions             `json:"conditions"`
 	Label       string                 `json:"label"`
 	Filesystem  Filesystem             `json:"fs"`
-	Env      map[string]string `json:"env"`
-	Channels []string          `json:"channels,omitempty"`
+	Env         map[string]string      `json:"env"`
+	Channels    []string               `json:"channels,omitempty"`
 
 	// Bounds for priority-channel updates. Nil means unset: the floor then
-	// defaults to MinPriority and the ceiling to the priority the process was
-	// submitted with, so an unconfigured process can be decayed freely but never
-	// escalated above its original standing. Both are resolved and persisted when
-	// the process is added, and reported back on read.
+	// defaults to constants.MIN_PRIORITY and the ceiling to the priority the
+	// process was submitted with, so an unconfigured process can be decayed
+	// freely but never escalated above its original standing. Both are resolved
+	// and persisted when the process is added, and reported back on read.
 	//
 	// Deliberately not part of Equals: that compares the specification as
 	// submitted, and these are server-resolved.
@@ -82,10 +84,11 @@ type FunctionSpec struct {
 }
 
 // ResolvePriorityBounds returns the effective [floor, ceiling] for priority
-// updates. An unset floor is MinPriority; an unset ceiling is the priority the
-// spec carries, which at submission is the priority the process started at.
+// updates. An unset floor is constants.MIN_PRIORITY; an unset ceiling is the
+// priority the spec carries, which at submission is the priority the process
+// started at.
 func (funcSpec *FunctionSpec) ResolvePriorityBounds() (int, int) {
-	floor := MinPriority
+	floor := constants.MIN_PRIORITY
 	if funcSpec.PriorityFloor != nil {
 		floor = *funcSpec.PriorityFloor
 	}

@@ -105,7 +105,7 @@ func (m *MockProcessDB) SetProcessState(processID string, state int) error      
 func (m *MockProcessDB) SetParents(processID string, parents []string) error                      { return nil }
 func (m *MockProcessDB) SetChildren(processID string, children []string) error                    { return nil }
 func (m *MockProcessDB) SetWaitForParents(processID string, waitingForParent bool) error          { return nil }
-func (m *MockProcessDB) SetProcessPriorities(updates []core.PriorityUpdate) ([]core.PriorityUpdateResult, error) {
+func (m *MockProcessDB) SetProcessPriorities(colonyName string, updates []core.PriorityUpdate) ([]core.PriorityUpdateResult, error) {
 	return []core.PriorityUpdateResult{}, nil
 }
 func (m *MockProcessDB) Assign(executorID string, process *core.Process) error                    { return nil }
