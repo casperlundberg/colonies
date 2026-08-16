@@ -1,10 +1,36 @@
 // Package constants defines system-wide constants used throughout the ColonyOS server
 package constants
 
-// API Limits - Maximum values for API requests to prevent abuse
-const MAX_COUNT = 100         // Maximum number of items that can be requested in list operations
-const MAX_DAYS = 30           // Maximum number of days for log search operations
-const MAX_LOG_COUNT = 500     // Maximum number of log entries that can be requested at once
+import (
+	"os"
+	"strconv"
+)
+
+// MAX_COUNT is the maximum number of items a list operation may request.
+//
+// Configurable via COLONIES_MAX_COUNT, defaulting to the upstream 100. An
+// aggregating client has to read the WAITING queue in full to compute
+// per-priority depth, and reading only the first 100 is not a sample of the
+// queue -- processes are ordered by PRIORITYTIME, so the head is systematically
+// the highest-priority work. Decayed processes sort to the tail, which would
+// make exactly the jobs under study invisible.
+//
+// Raising this trades server load for visibility: the whole queue is
+// serialised on every call. For deep queues a server-side aggregate would be
+// better than a larger limit, but that is a wider change than this fork needs.
+var MAX_COUNT = envInt("COLONIES_MAX_COUNT", 100)
+
+func envInt(key string, fallback int) int {
+	if raw := os.Getenv(key); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			return n
+		}
+	}
+	return fallback
+}
+
+const MAX_DAYS = 30       // Maximum number of days for log search operations
+const MAX_LOG_COUNT = 500 // Maximum number of log entries that can be requested at once
 
 // Test Configuration - Default values used in test environments
 const TESTHOST = "localhost" // Default hostname for test servers
