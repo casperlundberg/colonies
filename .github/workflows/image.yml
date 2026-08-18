@@ -26,18 +26,58 @@ env:
   IMAGE: colonies
 
 jobs:
-  # Gate: nothing is built or deployed until the suite is green. The override
-  # exists because parts of this suite are environment-dependent (the
-  # pkg/server/handlers packages stand up a real server); a pre-existing failure
-  # must never block a deploy outright. Run manually with skip_tests.
+  # TEMPORARY, for the current development phase (2026-08-18).
+  #
+  # The full Go suite takes ~20 min and the coverage step doubles it, so every
+  # colonies push cost ~35 min before an image could even start building. This
+  # fork is now essentially frozen -- the priority channel is done and little to
+  # no further change is expected here -- so paying that on commits that touch
+  # no Go code is waste.
+  #
+  # So the gate now runs only when Go source actually changed. It is NOT
+  # disabled: touch a .go file, go.mod or go.sum and the suite runs and blocks
+  # the build exactly as before.
+  #
+  # REVISIT if real development resumes in this fork: delete the `changes` job
+  # and restore `test` to running unconditionally.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: filter
+        run: |
+          base="${{ github.event.before }}"
+          # No diffable base (manual dispatch, tag, new branch, force push):
+          # fall back to running the suite rather than silently skipping it.
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::no diffable base -- running the Go suite"
+          elif git diff --name-only "$base" "${{ github.sha }}" \
+               | grep -qE '\.go$|^go\.(mod|sum)$'; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Go source changed -- running the suite"
+          else
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::no Go source in this push -- skipping the suite (temporary policy)"
+          fi
+
   test:
-    if: ${{ !inputs.skip_tests }}
+    needs: changes
+    if: ${{ needs.changes.outputs.go == 'true' && !inputs.skip_tests }}
     uses: ./.github/workflows/go.yml
     secrets: inherit
 
   build-and-push-image:
-    needs: test
-    if: ${{ always() && (needs.test.result == 'success' || inputs.skip_tests) }}
+    needs: [changes, test]
+    # Proceed when the suite passed OR was legitimately skipped; never when it
+    # failed or was cancelled.
+    if: ${{ always() && needs.test.result != 'failure' && needs.test.result != 'cancelled' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
