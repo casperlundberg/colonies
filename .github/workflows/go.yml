@@ -2,9 +2,12 @@ name: Go
 
 # Was `branches: [ main ]`, inherited from upstream. All fork work happens on
 # priority-channel, so this workflow had never run once.
+#
+# No `push` trigger on purpose: image.yml calls this as a gate before the image
+# is built, so a push would run the whole suite twice. Pull requests still get
+# it directly.
 on:
-  push:
-    branches: ['**']
+  workflow_call:
   pull_request:
   workflow_dispatch:
 
