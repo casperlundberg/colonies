@@ -1,0 +1,118 @@
+name: Image
+
+# Replaces the old docker_master.yaml, which pushed to ghcr.io/casperlundberg
+# with docker/metadata-action's default tags (main/latest/semver). The cluster
+# pulls docker.io/cappelumpa/colonies:priority-channel-<sha8>
+# (helm/colonies-server/values.yaml), so nothing that workflow built had ever
+# been what actually ran.
+on:
+  push:
+    branches: ['**']
+    tags: ['*']
+  workflow_dispatch:
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: docker.io
+  NAMESPACE: cappelumpa
+  IMAGE: colonies
+
+jobs:
+  build-and-push-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the tag walks history; a shallow clone lies
+
+      # <branch>-<sha8>, matching what the charts pin. Slashes are illegal in a
+      # tag, so feat/x becomes feat-x.
+      #
+      # The SHA is the last commit touching source, not HEAD: a workflow or
+      # README commit must not re-tag the image and trigger a pointless
+      # redeploy. This exclude set must stay identical to the `colonies` case in
+      # priority-decay-journal's deploy/scripts/image-tag.sh and to the
+      # branch-sha8 strategy in vikingvault-infrastructure.
+      - name: Derive tag
+        id: tag
+        run: |
+          branch=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')
+          sha=$(git log -1 --format=%h --abbrev=8 -- . ':!.github' ':!*.md' ':!docs')
+          tag="${branch}-${sha}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "ref=${REGISTRY}/${NAMESPACE}/${IMAGE}:${tag}" >> "$GITHUB_OUTPUT"
+          echo "::notice title=colonies::$tag"
+
+      - name: Already in the registry?
+        id: exists
+        run: |
+          url="https://hub.docker.com/v2/repositories/${NAMESPACE}/${IMAGE}/tags/${{ steps.tag.outputs.tag }}"
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$url")
+          if [ "$code" = "200" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::${{ steps.tag.outputs.ref }} already exists -- skipping build"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.exists.outputs.skip == 'false'
+
+      - uses: docker/login-action@v3
+        if: steps.exists.outputs.skip == 'false'
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKERHUB_USERNAME || env.NAMESPACE }}
+          password: ${{ secrets.DOCKERHUB_TOKEN || secrets.DOCKERHUB_TOKEN_BACKUP }}
+
+      - uses: docker/build-push-action@v6
+        if: steps.exists.outputs.skip == 'false'
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.tag.outputs.ref }}
+          build-args: |
+            VERSION=${{ steps.tag.outputs.tag }}
+            BUILDTIME=${{ github.event.repository.updated_at }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:buildcache,mode=max
+
+      # Push-from-dev bump, matching the direction apps/ uses. Runs even when the
+      # build was skipped: an existing tag is still the tag that should be pinned.
+      # Only the deploy branch may move the cluster -- set the DEPLOY_BRANCH
+      # repository variable (here: priority-channel).
+      - name: Bump colonies-server in vikingvault-infrastructure
+        if: github.ref_name == (vars.DEPLOY_BRANCH || 'main')
+        env:
+          GH_TOKEN: ${{ secrets.INFRASTRUCTURE_REPO_TOKEN || secrets.INFRASTRUCTURE_REPO_TOKEN_BACKUP }}
+        run: |
+          set -euo pipefail
+          git clone --quiet \
+            "https://x-access-token:${GH_TOKEN}@github.com/vikingvault-labs/vikingvault-infrastructure.git" \
+            /tmp/infra
+          cd /tmp/infra
+          git config user.name  'GitHub Actions'
+          git config user.email 'actions@github.com'
+
+          # Reset-and-reapply on each attempt: setting a tag to a known value is
+          # idempotent, so a concurrent push can never conflict.
+          for i in 1 2 3 4 5; do
+            git fetch --quiet origin main
+            git reset --hard --quiet origin/main
+            python3 .github/scripts/set_image_tag.py \
+              helm/colonies-server/values.yaml '${{ steps.tag.outputs.tag }}'
+            git add -- helm/colonies-server/values.yaml
+            if git diff --cached --quiet; then
+              echo "colonies-server already pinned to ${{ steps.tag.outputs.tag }}"
+              exit 0
+            fi
+            git commit --quiet -m "chore(images): colonies-server ${{ steps.tag.outputs.tag }}
+
+          From ${{ github.repository }}@${{ github.sha }} (${{ github.ref_name }})."
+            git push --quiet origin HEAD:main && exit 0 || sleep $((i * 2))
+          done
+          echo "::error::could not push to vikingvault-infrastructure after 5 attempts"
+          exit 1
