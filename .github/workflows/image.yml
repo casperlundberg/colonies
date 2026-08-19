@@ -73,11 +73,30 @@ jobs:
     uses: ./.github/workflows/go.yml
     secrets: inherit
 
+  # Runs alongside build-and-push-image (both start once `test` passes)
+  # instead of gating it -- coverage.yml was split out of go.yml specifically
+  # so this job's completion isn't part of what `test` above waits on.
+  coverage:
+    needs: [changes, test]
+    if: ${{ always() && needs.test.result == 'success' }}
+    uses: ./.github/workflows/coverage.yml
+    secrets: inherit
+
   build-and-push-image:
     needs: [changes, test]
     # Proceed when the suite passed OR was legitimately skipped; never when it
-    # failed or was cancelled.
-    if: ${{ always() && needs.test.result != 'failure' && needs.test.result != 'cancelled' }}
+    # failed or was cancelled. And only build on a ref that can actually be
+    # used: the deploy branch (the only one the Bump step below ever pushes),
+    # a tag (goreleaser's ref, kept buildable for archival images), or a
+    # manual dispatch. `branches: ['**']` on the trigger above means every
+    # push to every branch reaches this job -- without this, a push to `main`
+    # (this fork's upstream-tracking branch, DEPLOY_BRANCH is
+    # `priority-channel`) built and pushed a `main-<sha>` image nothing ever
+    # deploys.
+    if: >
+      ${{ always() && needs.test.result != 'failure' && needs.test.result != 'cancelled' &&
+         (github.event_name == 'workflow_dispatch' || github.ref_type == 'tag' ||
+          github.ref_name == (vars.DEPLOY_BRANCH || 'main')) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
